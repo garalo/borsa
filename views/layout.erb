@@ -4,10 +4,26 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BIST Veri Analizi</title>
+  <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="/css/style.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+  <script>
+    // Console'u temizle - sadece SES uyarılarını filtrele
+    if (typeof console !== 'undefined') {
+      const originalConsoleWarn = console.warn;
+      console.warn = function() {
+        const message = Array.from(arguments).join(' ');
+        if (!message.includes('SES') && 
+            !message.includes('dateTaming') && 
+            !message.includes('mathTaming') &&
+            !message.includes('lockdown-install') &&
+            !message.includes('Removing unpermitted intrinsics')) {
+          originalConsoleWarn.apply(console, arguments);
+        }
+      };
+    }
+  </script>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head>
 <body>
   <%= erb :'partials/_header' %>

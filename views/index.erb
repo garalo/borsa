@@ -1,4 +1,3 @@
-
 <div class="container mt-4">
     <div class="row">
       <div class="col-12">
@@ -41,61 +40,25 @@
             </div>
           </div>
           
-          <div style="height: 500px;">
-            <canvas id="priceChart"></canvas>
-          </div>
+          <div id="priceChart" style="height: 500px;"></div>
         </div>
       </div>
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.0.0/dist/chartjs-plugin-annotation.min.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const priceData = <%= @price_data.to_json %>;
       const prices = priceData.map(d => d.close);
       const dates = priceData.map(d => d.date);
-      
-
-
-      // Chart oluştur
-      const ctx = document.getElementById('priceChart').getContext('2d');
-      if (window.myChart != undefined) window.myChart.destroy();
 
       // Trend analizi için değişkenler
       const maxPrice = Math.max(...prices);
       const minPrice = Math.min(...prices);
-      const maxIndex = prices.indexOf(maxPrice);
-      const minIndex = prices.indexOf(minPrice);
-      const priceRange = maxPrice - minPrice;
-      
-      // Trend yönünü belirle
       const firstPrice = prices[0];
       const lastPrice = prices[prices.length - 1];
       const trendDirection = lastPrice > firstPrice ? 'Yükselen' : 'Düşen';
       const channelDays = dates.length;
-      
-      // Tepe ve dip noktalarından geçen doğruların eğimini hesapla
-      const upperSlope = (prices[prices.length - 1] - prices[0]) / (prices.length - 1);
-      const lowerSlope = upperSlope; // Paralel çizgiler için aynı eğim
-      
-      // Trend kanalı çizgileri için koordinatlar
-      const trendLines = {
-        upper: {
-          start: { x: 0, y: maxPrice },
-          end: { x: prices.length - 1, y: maxPrice }
-        },
-        lower: {
-          start: { x: 0, y: minPrice },
-          end: { x: prices.length - 1, y: minPrice }
-        },
-        middle: {
-          start: { x: 0, y: (maxPrice + minPrice) / 2 },
-          end: { x: prices.length - 1, y: (maxPrice + minPrice) / 2 }
-        }
-      };
 
       // Bilgileri DOM'a yazdir
       document.getElementById('channelTop').textContent = maxPrice.toFixed(2);
@@ -119,209 +82,223 @@
       document.getElementById('dailyLow').textContent = lastDay.low.toFixed(2);
       document.getElementById('dailyClose').textContent = lastDay.close.toFixed(2);
 
-      // Chart.js annotation plugin'ini register et
-      Chart.register(window['chartjs-plugin-annotation']);
-      
-      try {
-        window.myChart = new Chart(ctx, {
-          type: 'line',
-          data: {
-            labels: dates,
-            datasets: [{
-              label: 'Kapanış Fiyatı (TL)',
-              data: prices,
-              borderColor: '#007bff',
-              backgroundColor: 'rgba(0, 123, 255, 0.1)',
-              borderWidth: 2,
-              pointBackgroundColor: '#007bff',
-              pointBorderColor: '#ffffff',
-              pointBorderWidth: 1,
-              pointRadius: 2,
-              pointHoverRadius: 4,
-              fill: true,
-              tension: 0.1
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-              intersect: false,
-              mode: 'index'
-            },
-            plugins: {
-              legend: {
-                display: true,
-                position: 'top',
-                labels: {
-                  font: {
-                    size: 14,
-                    weight: 'bold'
-                  },
-                  color: '#374151'
-                }
-              },
-              tooltip: {
-                backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                titleColor: 'white',
-                bodyColor: 'white',
-                borderColor: '#2563eb',
-                borderWidth: 1,
-                cornerRadius: 8,
-                displayColors: false,
-                callbacks: {
-                  title: function(context) {
-                    return 'Tarih: ' + context[0].label;
-                  },
-                  label: function(context) {
-                    return 'Kapanış: ' + context.parsed.y.toFixed(2) + ' TL';
-                  }
-                }
-              },
-              annotation: {
-                annotations: {
-                  // Destek ve Direnç Çizgileri
-                  supportLine: {
-                    type: 'line',
-                    yMin: support1,
-                    yMax: support1,
-                    borderColor: '#ffa500',
-                    borderWidth: 2,
-                    borderDash: [5, 5],
-                    label: {
-                      display: true,
-                      content: 'Destek: ' + support1.toFixed(2),
-                      position: 'center',
-                      backgroundColor: 'rgba(255, 165, 0, 0.8)',
-                      color: 'white',
-                      font: {
-                        size: 11,
-                        weight: 'bold'
-                      },
-                      padding: 4,
-                      borderRadius: 3
-                    }
-                  },
-                  resistanceLine: {
-                    type: 'line',
-                    yMin: resistance1,
-                    yMax: resistance1,
-                    borderColor: '#800080',
-                    borderWidth: 2,
-                    borderDash: [5, 5],
-                    label: {
-                      display: true,
-                      content: 'Direnç: ' + resistance1.toFixed(2),
-                      position: 'center',
-                      backgroundColor: 'rgba(128, 0, 128, 0.8)',
-                      color: 'white',
-                      font: {
-                        size: 11,
-                        weight: 'bold'
-                      },
-                      padding: 4,
-                      borderRadius: 3
-                    }
-                  },
-                  upperLine: {
-                    type: 'line',
-                    yMin: maxPrice,
-                    yMax: maxPrice,
-                    borderColor: '#dc3545',
-                    borderWidth: 2,
-                    borderDash: [5, 5],
-                    label: {
-                      display: true,
-                      content: 'Tepe: ' + maxPrice.toFixed(2),
-                      position: 'center',
-                      backgroundColor: 'rgba(220, 53, 69, 0.8)',
-                      color: 'white',
-                      font: {
-                        size: 11,
-                        weight: 'bold'
-                      },
-                      padding: 4,
-                      borderRadius: 3
-                    }
-                  },
-                  middleLine: {
-                    type: 'line',
-                    yMin: (maxPrice + minPrice) / 2,
-                    yMax: (maxPrice + minPrice) / 2,
-                    borderColor: '#0dcaf0',
-                    borderWidth: 1,
-                    borderDash: [3, 3],
-                    label: {
-                      display: true,
-                      content: 'Orta: ' + ((maxPrice + minPrice) / 2).toFixed(2),
-                      position: 'center',
-                      backgroundColor: 'rgba(13, 202, 240, 0.8)',
-                      color: 'white',
-                      font: {
-                        size: 10,
-                        weight: 'bold'
-                      },
-                      padding: 3,
-                      borderRadius: 3
-                    }
-                  },
-                  lowerLine: {
-                    type: 'line',
-                    yMin: minPrice,
-                    yMax: minPrice,
-                    borderColor: '#198754',
-                    borderWidth: 2,
-                    borderDash: [5, 5],
-                    label: {
-                      display: true,
-                      content: 'Dip: ' + minPrice.toFixed(2),
-                      position: 'center',
-                      backgroundColor: 'rgba(25, 135, 84, 0.8)',
-                      color: 'white',
-                      font: {
-                        size: 11,
-                        weight: 'bold'
-                      },
-                      padding: 4,
-                      borderRadius: 3
-                    }
-                  }
-                }
-              }
-            },
-            scales: {
-              x: {
-                grid: {
-                  color: 'rgba(0, 0, 0, 0.1)',
-                  borderColor: 'rgba(0, 0, 0, 0.2)'
-                },
-                ticks: {
-                  color: '#666',
-                  maxTicksLimit: 10
-                }
-              },
-              y: { 
-                beginAtZero: false,
-                suggestedMin: minPrice * 0.95,
-                suggestedMax: maxPrice * 1.05,
-                grid: {
-                  color: 'rgba(0, 0, 0, 0.1)',
-                  borderColor: 'rgba(0, 0, 0, 0.2)'
-                },
-                ticks: {
-                  color: '#666',
-                  callback: function(value) {
-                    return value.toFixed(2) + ' TL';
-                  }
-                }
-              }
-            }
+      // Plotly.js ile mum grafiği oluştur
+      const candlestickTrace = {
+        x: dates,
+        close: priceData.map(d => d.close),
+        decreasing: {line: {color: '#ef5350'}},
+        high: priceData.map(d => d.high),
+        increasing: {line: {color: '#26a69a'}},
+        line: {color: 'rgba(31,119,180,1)'},
+        low: priceData.map(d => d.low),
+        open: priceData.map(d => d.open),
+        type: 'candlestick',
+        name: 'Fiyat',
+        xaxis: 'x',
+        yaxis: 'y',
+        hovertemplate: 
+          '<b>📅 %{x}</b><br>' +
+          '<span style="color:#28a745">🟢 Açılış: %{open:.2f} TL</span><br>' +
+          '<span style="color:#dc3545">🔴 Yüksek: %{high:.2f} TL</span><br>' +
+          '<span style="color:#6f42c1">🟣 Düşük: %{low:.2f} TL</span><br>' +
+          '<span style="color:#007bff">🔵 Kapanış: %{close:.2f} TL</span><br>' +
+          '<extra></extra>',
+        hoverlabel: {
+          bgcolor: 'rgba(0, 0, 0, 0.9)',
+          bordercolor: '#007bff',
+          font: {
+            color: 'white',
+            size: 13,
+            family: 'Arial, sans-serif'
           }
-        });
-      } catch (error) {
-        console.error("Grafik oluşturulurken bir hata oluştu:", error);
-      }
+        }
+      };
+
+      // Teknik çizgiler
+      const shapes = [
+        // Destek çizgisi
+        {
+          type: 'line',
+          x0: dates[0],
+          y0: support1,
+          x1: dates[dates.length - 1],
+          y1: support1,
+          line: {
+            color: '#ffa500',
+            width: 2,
+            dash: 'dash'
+          }
+        },
+        // Direnç çizgisi
+        {
+          type: 'line',
+          x0: dates[0],
+          y0: resistance1,
+          x1: dates[dates.length - 1],
+          y1: resistance1,
+          line: {
+            color: '#800080',
+            width: 2,
+            dash: 'dash'
+          }
+        },
+        // Kanal tepe
+        {
+          type: 'line',
+          x0: dates[0],
+          y0: maxPrice,
+          x1: dates[dates.length - 1],
+          y1: maxPrice,
+          line: {
+            color: '#dc3545',
+            width: 2,
+            dash: 'dash'
+          }
+        },
+        // Kanal dip
+        {
+          type: 'line',
+          x0: dates[0],
+          y0: minPrice,
+          x1: dates[dates.length - 1],
+          y1: minPrice,
+          line: {
+            color: '#198754',
+            width: 2,
+            dash: 'dash'
+          }
+        },
+        // Orta bant
+        {
+          type: 'line',
+          x0: dates[0],
+          y0: (maxPrice + minPrice) / 2,
+          x1: dates[dates.length - 1],
+          y1: (maxPrice + minPrice) / 2,
+          line: {
+            color: '#0dcaf0',
+            width: 1,
+            dash: 'dot'
+          }
+        }
+      ];
+
+      // Çizgi etiketleri - Türkçe ve renkli
+      const annotations = [
+        {
+          x: dates[Math.floor(dates.length * 0.8)],
+          y: support1,
+          text: '🛡️ Destek: ' + support1.toFixed(2) + ' TL',
+          showarrow: false,
+          bgcolor: 'rgba(255, 165, 0, 0.9)',
+          bordercolor: '#ffa500',
+          borderwidth: 2,
+          font: {color: 'white', size: 12, family: 'Arial, sans-serif'},
+          borderradius: 5
+        },
+        {
+          x: dates[Math.floor(dates.length * 0.8)],
+          y: resistance1,
+          text: '⚔️ Direnç: ' + resistance1.toFixed(2) + ' TL',
+          showarrow: false,
+          bgcolor: 'rgba(128, 0, 128, 0.9)',
+          bordercolor: '#800080',
+          borderwidth: 2,
+          font: {color: 'white', size: 12, family: 'Arial, sans-serif'},
+          borderradius: 5
+        },
+        {
+          x: dates[Math.floor(dates.length * 0.5)],
+          y: maxPrice,
+          text: '🔺 Tepe: ' + maxPrice.toFixed(2) + ' TL',
+          showarrow: false,
+          bgcolor: 'rgba(220, 53, 69, 0.9)',
+          bordercolor: '#dc3545',
+          borderwidth: 2,
+          font: {color: 'white', size: 12, family: 'Arial, sans-serif'},
+          borderradius: 5
+        },
+        {
+          x: dates[Math.floor(dates.length * 0.5)],
+          y: minPrice,
+          text: '🔻 Dip: ' + minPrice.toFixed(2) + ' TL',
+          showarrow: false,
+          bgcolor: 'rgba(25, 135, 84, 0.9)',
+          bordercolor: '#198754',
+          borderwidth: 2,
+          font: {color: 'white', size: 12, family: 'Arial, sans-serif'},
+          borderradius: 5
+        },
+        {
+          x: dates[Math.floor(dates.length * 0.2)],
+          y: (maxPrice + minPrice) / 2,
+          text: '➖ Orta: ' + ((maxPrice + minPrice) / 2).toFixed(2) + ' TL',
+          showarrow: false,
+          bgcolor: 'rgba(13, 202, 240, 0.9)',
+          bordercolor: '#0dcaf0',
+          borderwidth: 2,
+          font: {color: 'white', size: 11, family: 'Arial, sans-serif'},
+          borderradius: 5
+        }
+      ];
+
+      const layout = {
+        title: false,
+        dragmode: 'zoom',
+        margin: {
+          r: 10,
+          t: 25,
+          b: 40,
+          l: 60
+        },
+        showlegend: false,
+        font: {
+          family: 'Arial, sans-serif',
+          size: 12,
+          color: '#333'
+        },
+        xaxis: {
+          autorange: true,
+          domain: [0, 1],
+          range: [dates[0], dates[dates.length - 1]],
+          rangeslider: {
+            range: [dates[0], dates[dates.length - 1]],
+            bgcolor: 'rgba(0,0,0,0.1)'
+          },
+          title: {
+            text: '📅 Tarih',
+            font: {size: 14, color: '#666'}
+          },
+          type: 'date',
+          gridcolor: 'rgba(0,0,0,0.1)'
+        },
+        yaxis: {
+          autorange: true,
+          domain: [0, 1],
+          range: [minPrice * 0.95, maxPrice * 1.05],
+          title: {
+            text: '💰 Fiyat (TL)',
+            font: {size: 14, color: '#666'}
+          },
+          type: 'linear',
+          gridcolor: 'rgba(0,0,0,0.1)',
+          tickformat: '.2f',
+          ticksuffix: ' TL'
+        },
+        shapes: shapes,
+        annotations: annotations,
+        hovermode: 'x unified',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        paper_bgcolor: 'rgba(0,0,0,0)'
+      };
+
+      const config = {
+        responsive: true,
+        displayModeBar: true,
+        modeBarButtonsToRemove: ['pan2d', 'select2d', 'lasso2d', 'resetScale2d', 'hoverClosestCartesian', 'hoverCompareCartesian'],
+        displaylogo: false
+      };
+
+      Plotly.newPlot('priceChart', [candlestickTrace], layout, config);
     });
 </script>
-
-     
