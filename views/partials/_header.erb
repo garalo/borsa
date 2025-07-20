@@ -1,0 +1,11 @@
+<nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+  <div class="container">
+    <a class="navbar-brand" href="/">BIST Analiz</a>
+    <form class="d-flex ms-auto" action="/" method="get">
+      <input class="form-control me-2" type="search" name=":symbol" 
+             placeholder="Hisse kodunu girin (örn: THYAO)" 
+             value="<%= params[':symbol']&.gsub('.IS', '') %>">
+      <button class="btn btn-outline-primary" type="submit">Ara</button>
+    </form>
+  </div>
+</nav>
