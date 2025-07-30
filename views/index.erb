@@ -6,7 +6,7 @@
             <h2 class="h4 mb-0 text-primary"><%= @display_symbol %> <%= @range_labels[@selected_range] %> Fiyat Verileri</h2>
             <div class="btn-group" role="group">
               <% @range_labels.each do |range_key, range_label| %>
-                <a href="/?:symbol=<%= @display_symbol %>&range=<%= range_key %>" 
+                <a href="/?:symbol=<%= @display_symbol %>&range=<%= range_key %><%= params[:theme] ? "&theme=#{params[:theme]}" : '' %>" 
                    class="btn btn-outline-primary btn-sm <%= 'active' if @selected_range == range_key %>">
                   <%= range_label %>
                 </a>
@@ -506,9 +506,45 @@
         displaylogo: false
       };
 
+      // Tema güncellemesi için global fonksiyon
+      window.updateChartTheme = function(theme) {
+        const isDark = theme === 'dark';
+        const updatedLayout = {
+          ...layout,
+          plot_bgcolor: isDark ? '#2d3748' : 'rgba(0,0,0,0)',
+          paper_bgcolor: isDark ? '#2d3748' : 'rgba(0,0,0,0)',
+          font: {
+            ...layout.font,
+            color: isDark ? '#e9ecef' : '#333'
+          },
+          xaxis: {
+            ...layout.xaxis,
+            gridcolor: isDark ? '#4a5568' : 'rgba(0,0,0,0.1)',
+            title: {
+              ...layout.xaxis.title,
+              font: {size: 14, color: isDark ? '#9ca3af' : '#666'}
+            }
+          },
+          yaxis: {
+            ...layout.yaxis,
+            gridcolor: isDark ? '#4a5568' : 'rgba(0,0,0,0.1)',
+            title: {
+              ...layout.yaxis.title,
+              font: {size: 14, color: isDark ? '#9ca3af' : '#666'}
+            }
+          }
+        };
+        
+        Plotly.relayout('priceChart', updatedLayout);
+      };
+      
       try {
         Plotly.newPlot('priceChart', [candlestickTrace], layout, config);
         console.log('Grafik başarıyla oluşturuldu');
+        
+        // Sayfa yüklendiğinde mevcut temayı uygula
+        const currentTheme = document.documentElement.getAttribute('data-bs-theme') || 'light';
+        window.updateChartTheme(currentTheme);
       } catch (error) {
         console.error('Grafik oluşturma hatası:', error);
         document.getElementById('priceChart').innerHTML = '<div class="alert alert-danger">Grafik oluşturulamadı: ' + error.message + '</div>';
