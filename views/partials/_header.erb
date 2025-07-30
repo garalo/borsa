@@ -5,6 +5,7 @@
       <input class="form-control me-2" type="search" name=":symbol" 
              placeholder="Hisse kodunu girin (örn: THYAO)" 
              value="<%= params[':symbol']&.gsub('.IS', '') %>">
+      <input type="hidden" name="range" value="<%= params[:range] || '6mo' %>">
       <button class="btn btn-outline-primary" type="submit">Ara</button>
     </form>
   </div>

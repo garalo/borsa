@@ -2,7 +2,17 @@
     <div class="row">
       <div class="col-12">
         <div class="chart-container">
-          <h2 class="h4 mb-4 text-primary"><%= @display_symbol %> 6 Aylık Kapanış Fiyatları</h2>
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="h4 mb-0 text-primary"><%= @display_symbol %> <%= @range_labels[@selected_range] %> Fiyat Verileri</h2>
+            <div class="btn-group" role="group">
+              <% @range_labels.each do |range_key, range_label| %>
+                <a href="/?:symbol=<%= @display_symbol %>&range=<%= range_key %>" 
+                   class="btn btn-outline-primary btn-sm <%= 'active' if @selected_range == range_key %>">
+                  <%= range_label %>
+                </a>
+              <% end %>
+            </div>
+          </div>
           
           <div class="row mb-3">
             <div class="col-md-6">
@@ -52,12 +62,87 @@
       const prices = priceData.map(d => d.close);
       const dates = priceData.map(d => d.date);
 
-      // Trend analizi için değişkenler
-      const maxPrice = Math.max(...prices);
-      const minPrice = Math.min(...prices);
-      const firstPrice = prices[0];
-      const lastPrice = prices[prices.length - 1];
-      const trendDirection = lastPrice > firstPrice ? 'Yükselen' : 'Düşen';
+      // Veri kontrolü
+      if (!priceData || priceData.length < 1) {
+        console.error('Yetersiz veri:', priceData);
+        document.getElementById('priceChart').innerHTML = '<div class="alert alert-warning">Veri yüklenemedi. Lütfen sayfayı yenileyin.</div>';
+        return;
+      }
+      
+      console.log('Veri yüklendi:', priceData.length, 'kayıt');
+
+      // Zaman dilimine göre analiz stratejisi
+      const dataLength = prices.length;
+      let analysisWindow, channelWindow;
+      
+      if (dataLength <= 7) {        // 1 hafta
+        analysisWindow = dataLength;
+        channelWindow = dataLength;
+      } else if (dataLength <= 30) { // 1 ay
+        analysisWindow = Math.min(20, dataLength);
+        channelWindow = dataLength; // Tüm veri
+      } else if (dataLength <= 90) { // 3 ay
+        analysisWindow = Math.min(60, dataLength);
+        channelWindow = dataLength; // Tüm veri
+      } else if (dataLength <= 180) { // 6 ay
+        analysisWindow = Math.min(90, dataLength); // Son 3 ay
+        channelWindow = dataLength; // Tüm veri
+      } else if (dataLength <= 365) { // 1 yıl
+        analysisWindow = Math.min(120, dataLength); // Son 4 ay
+        channelWindow = dataLength; // Tüm 1 yıllık veri
+      } else {                      // 2 yıl
+        analysisWindow = Math.min(120, dataLength); // Son 4 ay (destek/direnç için)
+        channelWindow = dataLength; // Tüm 2 yıllık veri
+      }
+      
+      // Destek/direnç için son dönem verilerini al
+      const recentPriceData = priceData.slice(-analysisWindow);
+      const recentPrices = recentPriceData.map(d => d.close);
+      const recentHighs = recentPriceData.map(d => d.high);
+      const recentLows = recentPriceData.map(d => d.low);
+      
+      // Kanal seviyeleri için daha geniş veri kullan
+      const channelPriceData = priceData.slice(-channelWindow);
+      
+      // Veriyi daha dikkatli filtrele
+      const validChannelData = channelPriceData.filter(d => 
+        d && d.high != null && d.low != null && 
+        d.high > 0 && d.low > 0 && 
+        !isNaN(d.high) && !isNaN(d.low)
+      );
+      
+      const channelHighs = validChannelData.map(d => d.high);
+      const channelLows = validChannelData.map(d => d.low);
+      
+      // Kanal seviyeleri - geçerli verilerden
+      const maxPrice = channelHighs.length > 0 ? Math.max(...channelHighs) : Math.max(...prices);
+      const minPrice = channelLows.length > 0 ? Math.min(...channelLows) : Math.min(...prices);
+      
+      console.log('Kanal veri kontrolü:', {
+        totalData: channelPriceData.length,
+        validData: validChannelData.length,
+        invalidData: channelPriceData.length - validChannelData.length,
+        minPrice: minPrice.toFixed(2),
+        maxPrice: maxPrice.toFixed(2),
+        sampleData: validChannelData.slice(0, 3).map(d => ({high: d.high, low: d.low}))
+      });
+      
+      // Trend yönü - daha hassas hesaplama
+      const trendSampleSize = Math.max(5, Math.floor(recentPrices.length * 0.25));
+      const firstPeriodAvg = recentPrices.slice(0, trendSampleSize).reduce((a, b) => a + b, 0) / trendSampleSize;
+      const lastPeriodAvg = recentPrices.slice(-trendSampleSize).reduce((a, b) => a + b, 0) / trendSampleSize;
+      
+      // Trend gücünü de hesapla
+      const trendStrength = Math.abs(lastPeriodAvg - firstPeriodAvg) / firstPeriodAvg * 100;
+      let trendDirection;
+      
+      if (trendStrength < 2) {
+        trendDirection = 'Yatay';
+      } else if (lastPeriodAvg > firstPeriodAvg) {
+        trendDirection = trendStrength > 10 ? 'Güçlü Yükselen' : 'Yükselen';
+      } else {
+        trendDirection = trendStrength > 10 ? 'Güçlü Düşen' : 'Düşen';
+      }
       const channelDays = dates.length;
 
       // Bilgileri DOM'a yazdir
@@ -67,16 +152,96 @@
       document.getElementById('trendDirection').textContent = trendDirection;
       document.getElementById('channelDays').textContent = channelDays;
 
-      // Destek ve Direnç Hesaplama (Basit Pivot Noktası)
-      const lastDay = priceData[priceData.length - 1];
-      const pivot = (lastDay.high + lastDay.low + lastDay.close) / 3;
-      const resistance1 = (2 * pivot) - lastDay.low;
-      const support1 = (2 * pivot) - lastDay.high;
+      // Destek ve Direnç Hesaplama - esnek yöntem
+      const analysisData = recentPriceData;
+      const currentPrice = analysisData[analysisData.length - 1].close;
+      
+      // Swing point analizi - zaman dilimine göre uyarlanmış
+      let swingWindow;
+      if (dataLength <= 30) {
+        swingWindow = 1; // Kısa dönemde 1 günlük pencere
+      } else if (dataLength <= 90) {
+        swingWindow = 2; // Orta dönemde 2 günlük pencere
+      } else {
+        swingWindow = 3; // Uzun dönemde 3 günlük pencere
+      }
+      
+      const swingHighs = [];
+      const swingLows = [];
+      
+      // Daha esnek swing point bulma
+      for (let i = swingWindow; i < analysisData.length - swingWindow; i++) {
+        const current = analysisData[i];
+        let isSwingHigh = true;
+        let isSwingLow = true;
+        
+        // Önceki ve sonraki günlerle karşılaştır
+        for (let j = 1; j <= swingWindow; j++) {
+          if (current.high <= analysisData[i-j].high || current.high <= analysisData[i+j].high) {
+            isSwingHigh = false;
+          }
+          if (current.low >= analysisData[i-j].low || current.low >= analysisData[i+j].low) {
+            isSwingLow = false;
+          }
+        }
+        
+        if (isSwingHigh) swingHighs.push(current.high);
+        if (isSwingLow) swingLows.push(current.low);
+      }
+      
+      // Destek ve direnç hesaplama
+      let support1, resistance1;
+      
+      // Önce swing point'leri dene
+      if (swingLows.length > 0) {
+        const validSupports = swingLows.filter(low => low < currentPrice);
+        support1 = validSupports.length > 0 ? Math.max(...validSupports) : Math.min(...recentLows);
+      } else {
+        // Fallback: Alt %25'lik dilim
+        const sortedLows = [...recentLows].sort((a, b) => a - b);
+        support1 = sortedLows[Math.floor(sortedLows.length * 0.25)];
+      }
+      
+      if (swingHighs.length > 0) {
+        const validResistances = swingHighs.filter(high => high > currentPrice);
+        resistance1 = validResistances.length > 0 ? Math.min(...validResistances) : Math.max(...recentHighs);
+      } else {
+        // Fallback: Üst %25'lik dilim
+        const sortedHighs = [...recentHighs].sort((a, b) => b - a);
+        resistance1 = sortedHighs[Math.floor(sortedHighs.length * 0.25)];
+      }
+      
+      // Son kontrol - eğer hala bulunamadıysa basit yöntem
+      if (!support1 || support1 >= currentPrice) {
+        const sortedLows = [...recentLows].sort((a, b) => a - b);
+        support1 = sortedLows[Math.floor(sortedLows.length * 0.3)];
+      }
+      
+      if (!resistance1 || resistance1 <= currentPrice) {
+        const sortedHighs = [...recentHighs].sort((a, b) => b - a);
+        resistance1 = sortedHighs[Math.floor(sortedHighs.length * 0.3)];
+      }
+      
+      console.log('Analiz Bilgileri:', {
+        dataLength,
+        analysisWindow,
+        channelWindow,
+        swingWindow,
+        swingHighs: swingHighs.length,
+        swingLows: swingLows.length,
+        currentPrice: currentPrice.toFixed(2),
+        support1: support1.toFixed(2),
+        resistance1: resistance1.toFixed(2),
+        channelRange: `${minPrice.toFixed(2)} - ${maxPrice.toFixed(2)}`,
+        channelMiddle: ((maxPrice + minPrice) / 2).toFixed(2),
+        pricePosition: `Min: ${Math.min(...prices).toFixed(2)}, Max: ${Math.max(...prices).toFixed(2)}`
+      });
 
       document.getElementById('supportPrice').textContent = support1.toFixed(2);
       document.getElementById('resistancePrice').textContent = resistance1.toFixed(2);
 
       // Günlük Bilgileri DOM'a yazdır
+      const lastDay = priceData[priceData.length - 1];
       document.getElementById('dailyOpen').textContent = lastDay.open.toFixed(2);
       document.getElementById('dailyHigh').textContent = lastDay.high.toFixed(2);
       document.getElementById('dailyLow').textContent = lastDay.low.toFixed(2);
@@ -114,12 +279,26 @@
         }
       };
 
-      // Teknik çizgiler
-      const shapes = [
-        // Destek çizgisi
-        {
+      // Teknik çizgiler - zaman dilimine göre uyarlanmış
+      const shapes = [];
+      
+      // Destek ve direnç çizgileri için başlangıç noktası
+      let supportStartRatio;
+      if (dataLength <= 30) {
+        supportStartRatio = 0.3; // Kısa dönemde %30'dan başla
+      } else if (dataLength <= 90) {
+        supportStartRatio = 0.5; // Orta dönemde ortadan başla
+      } else {
+        supportStartRatio = 0.7; // Uzun dönemde son %30'luk kısımda
+      }
+      
+      const supportStartIndex = Math.floor(dates.length * supportStartRatio);
+      
+      // Destek çizgisi - daha esnek koşul
+      if (support1 && support1 > minPrice * 0.95 && support1 < maxPrice * 1.05) {
+        shapes.push({
           type: 'line',
-          x0: dates[0],
+          x0: dates[supportStartIndex],
           y0: support1,
           x1: dates[dates.length - 1],
           y1: support1,
@@ -128,11 +307,14 @@
             width: 2,
             dash: 'dash'
           }
-        },
-        // Direnç çizgisi
-        {
+        });
+      }
+      
+      // Direnç çizgisi - daha esnek koşul
+      if (resistance1 && resistance1 > minPrice * 0.95 && resistance1 < maxPrice * 1.05) {
+        shapes.push({
           type: 'line',
-          x0: dates[0],
+          x0: dates[supportStartIndex],
           y0: resistance1,
           x1: dates[dates.length - 1],
           y1: resistance1,
@@ -141,11 +323,26 @@
             width: 2,
             dash: 'dash'
           }
-        },
+        });
+      }
+      
+      console.log('Çizgi kontrolleri:', {
+        support1: support1?.toFixed(2),
+        resistance1: resistance1?.toFixed(2),
+        minPrice: minPrice.toFixed(2),
+        maxPrice: maxPrice.toFixed(2),
+        supportValid: support1 && support1 > minPrice * 0.95 && support1 < maxPrice * 1.05,
+        resistanceValid: resistance1 && resistance1 > minPrice * 0.95 && resistance1 < maxPrice * 1.05
+      });
+      
+      // Kanal çizgileri - kanal penceresine göre başlangıç
+      const channelStartIndex = Math.max(0, dates.length - channelWindow);
+      
+      shapes.push(
         // Kanal tepe
         {
           type: 'line',
-          x0: dates[0],
+          x0: dates[channelStartIndex],
           y0: maxPrice,
           x1: dates[dates.length - 1],
           y1: maxPrice,
@@ -158,7 +355,7 @@
         // Kanal dip
         {
           type: 'line',
-          x0: dates[0],
+          x0: dates[channelStartIndex],
           y0: minPrice,
           x1: dates[dates.length - 1],
           y1: minPrice,
@@ -171,7 +368,7 @@
         // Orta bant
         {
           type: 'line',
-          x0: dates[0],
+          x0: dates[channelStartIndex],
           y0: (maxPrice + minPrice) / 2,
           x1: dates[dates.length - 1],
           y1: (maxPrice + minPrice) / 2,
@@ -181,11 +378,14 @@
             dash: 'dot'
           }
         }
-      ];
+      );
 
-      // Çizgi etiketleri - Türkçe ve renkli
-      const annotations = [
-        {
+      // Çizgi etiketleri - sadece geçerli olanları göster
+      const annotations = [];
+      
+      // Destek ve direnç etiketleri - esnek koşullarla
+      if (support1 && support1 > minPrice * 0.95 && support1 < maxPrice * 1.05) {
+        annotations.push({
           x: dates[Math.floor(dates.length * 0.8)],
           y: support1,
           text: '🛡️ Destek: ' + support1.toFixed(2) + ' TL',
@@ -195,8 +395,11 @@
           borderwidth: 2,
           font: {color: 'white', size: 12, family: 'Arial, sans-serif'},
           borderradius: 5
-        },
-        {
+        });
+      }
+      
+      if (resistance1 && resistance1 > minPrice * 0.95 && resistance1 < maxPrice * 1.05) {
+        annotations.push({
           x: dates[Math.floor(dates.length * 0.8)],
           y: resistance1,
           text: '⚔️ Direnç: ' + resistance1.toFixed(2) + ' TL',
@@ -206,10 +409,14 @@
           borderwidth: 2,
           font: {color: 'white', size: 12, family: 'Arial, sans-serif'},
           borderradius: 5
-        },
+        });
+      }
+      
+      // Kanal etiketleri - her zaman göster
+      annotations.push(
         {
           x: dates[Math.floor(dates.length * 0.5)],
-          y: maxPrice,
+          y: maxPrice * 1.01, // Biraz yukarıda göster
           text: '🔺 Tepe: ' + maxPrice.toFixed(2) + ' TL',
           showarrow: false,
           bgcolor: 'rgba(220, 53, 69, 0.9)',
@@ -220,7 +427,7 @@
         },
         {
           x: dates[Math.floor(dates.length * 0.5)],
-          y: minPrice,
+          y: minPrice * 0.99, // Biraz aşağıda göster
           text: '🔻 Dip: ' + minPrice.toFixed(2) + ' TL',
           showarrow: false,
           bgcolor: 'rgba(25, 135, 84, 0.9)',
@@ -240,7 +447,7 @@
           font: {color: 'white', size: 11, family: 'Arial, sans-serif'},
           borderradius: 5
         }
-      ];
+      );
 
       const layout = {
         title: false,
@@ -299,6 +506,12 @@
         displaylogo: false
       };
 
-      Plotly.newPlot('priceChart', [candlestickTrace], layout, config);
+      try {
+        Plotly.newPlot('priceChart', [candlestickTrace], layout, config);
+        console.log('Grafik başarıyla oluşturuldu');
+      } catch (error) {
+        console.error('Grafik oluşturma hatası:', error);
+        document.getElementById('priceChart').innerHTML = '<div class="alert alert-danger">Grafik oluşturulamadı: ' + error.message + '</div>';
+      }
     });
 </script>

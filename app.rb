@@ -12,6 +12,20 @@ get '/' do
     input_symbol = params[':symbol']&.upcase&.strip || 'THYAO'
     @display_symbol = input_symbol.gsub('.IS', '')
 
+    # Zaman dilimi parametresi
+    time_range = params[:range] || '6mo'
+    @selected_range = time_range
+    
+    # Zaman dilimi etiketleri
+    @range_labels = {
+      '1wk' => '1 Hafta',
+      '1mo' => '1 Ay', 
+      '3mo' => '3 Ay',
+      '6mo' => '6 Ay',
+      '1y' => '1 Yıl',
+      '2y' => '2 Yıl'
+    }
+
     # API çağrısı için URL oluşturma
     url = "https://query1.finance.yahoo.com/v8/finance/chart/#{@display_symbol}.IS"
 
@@ -23,7 +37,7 @@ get '/' do
 
     query = {
       interval: '1d',
-      range: '6mo'
+      range: time_range
     }
 
     response = HTTParty.get(url, headers: headers, query: query)

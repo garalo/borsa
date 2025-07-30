@@ -22,3 +22,15 @@ body {
   padding: 1rem 0;
   margin-top: 3rem;
 }
+
+.btn-group .btn.active {
+  background-color: #0d6efd;
+  border-color: #0d6efd;
+  color: white;
+}
+
+.btn-group .btn:hover {
+  background-color: #0d6efd;
+  border-color: #0d6efd;
+  color: white;
+}
