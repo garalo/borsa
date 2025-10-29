@@ -70,6 +70,36 @@
                   <small class="text-muted ms-1"><%= @rsi_analysis[:signal] %></small>
                 </div>
                 <% end %>
+                <% if @macd_data && @macd_data[:macd].any? %>
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="macdToggle" checked>
+                  <label class="form-check-label" for="macdToggle">
+                    <span style="color: #e67e22;">■</span> MACD
+                  </label>
+                </div>
+                <div class="ms-2">
+                  <span class="badge bg-<%= @macd_analysis[:signal] == 'ALIM' ? 'success' : @macd_analysis[:signal] == 'SATIM' ? 'danger' : 'secondary' %> macd-current-badge" 
+                        title="<%= @macd_analysis[:trend] %> - <%= @macd_analysis[:strength] %>">
+                    📈 <%= @macd_analysis[:signal] %>
+                  </span>
+                  <small class="text-muted ms-1"><%= @macd_analysis[:strength] %></small>
+                </div>
+                <% end %>
+                <% if @bb_data && @bb_data[:upper].any? %>
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="bbToggle" checked>
+                  <label class="form-check-label" for="bbToggle">
+                    <span style="color: #8e44ad;">■</span> Bollinger
+                  </label>
+                </div>
+                <div class="ms-2">
+                  <span class="badge bg-<%= @bb_analysis[:signal] == 'ALIM' ? 'success' : @bb_analysis[:signal] == 'SATIM' ? 'danger' : 'secondary' %> bb-current-badge" 
+                        title="<%= @bb_analysis[:position] %> - <%= @bb_analysis[:volatility] %> Volatilite">
+                    🎯 <%= @bb_analysis[:signal] %>
+                  </span>
+                  <small class="text-muted ms-1">%B: <%= @bb_analysis[:percent_b] %></small>
+                </div>
+                <% end %>
               </div>
             </div>
           </div>
@@ -698,7 +728,7 @@
         },
         yaxis: {
           autorange: true,
-          domain: [0.3, 1], // Ana grafik için alan
+          domain: [<% if @rsi_data && @rsi_data.length > 0 && @macd_data && @macd_data[:macd].any? %>0.5<% elsif @rsi_data && @rsi_data.length > 0 %>0.3<% else %>0<% end %>, 1], // Ana grafik için alan
           range: [minPrice * 0.95, maxPrice * 1.05],
           title: {
             text: '💰 Fiyat (TL)',
@@ -711,7 +741,7 @@
         },
         <% if @rsi_data && @rsi_data.length > 0 %>
         yaxis2: {
-          domain: [0, 0.25], // RSI için alt alan
+          domain: [<% if @macd_data && @macd_data[:macd].any? %>0.25<% else %>0<% end %>, <% if @macd_data && @macd_data[:macd].any? %>0.45<% else %>0.25<% end %>], // RSI için orta alan
           range: [0, 100],
           title: {
             text: '📊 RSI',
@@ -724,6 +754,24 @@
           overlaying: 'y',
           showgrid: true,
           zeroline: false
+        },
+        <% end %>
+        <% if @macd_data && @macd_data[:macd].any? %>
+        yaxis3: {
+          domain: [0, 0.2], // MACD için alt alan
+          title: {
+            text: '📈 MACD',
+            font: {size: 12, color: '#e67e22'}
+          },
+          type: 'linear',
+          gridcolor: 'rgba(230, 126, 34, 0.1)',
+          tickformat: '.3f',
+          side: 'right',
+          overlaying: 'y',
+          showgrid: true,
+          zeroline: true,
+          zerolinecolor: '#95a5a6',
+          zerolinewidth: 1
         },
         <% end %>
         shapes: shapes,
@@ -774,6 +822,15 @@
               ...layout.yaxis2.title,
               font: {size: 12, color: isDark ? '#bb86fc' : '#9b59b6'}
             }
+          }<% end %><% if @macd_data && @macd_data[:macd].any? %>,
+          yaxis3: {
+            ...layout.yaxis3,
+            gridcolor: isDark ? 'rgba(230, 126, 34, 0.2)' : 'rgba(230, 126, 34, 0.1)',
+            title: {
+              ...layout.yaxis3.title,
+              font: {size: 12, color: isDark ? '#f39c12' : '#e67e22'}
+            },
+            zerolinecolor: isDark ? '#7f8c8d' : '#95a5a6'
           }<% end %>
         };
         
@@ -798,8 +855,104 @@
         };
         <% end %>
 
+        <% if @macd_data && @macd_data[:macd].any? %>
+        // MACD Trace'leri (üçüncü y-ekseni için)
+        const macdTrace = {
+          x: dates,
+          y: <%= @macd_data[:macd].to_json %>,
+          type: 'scatter',
+          mode: 'lines',
+          name: 'MACD',
+          line: {
+            color: '#e67e22',
+            width: 2
+          },
+          yaxis: 'y3',
+          hovertemplate: '<b>MACD:</b> %{y:.3f}<br><b>Tarih:</b> %{x}<extra></extra>'
+        };
+
+        const signalTrace = {
+          x: dates,
+          y: <%= @macd_data[:signal].to_json %>,
+          type: 'scatter',
+          mode: 'lines',
+          name: 'Signal',
+          line: {
+            color: '#3498db',
+            width: 2
+          },
+          yaxis: 'y3',
+          hovertemplate: '<b>Signal:</b> %{y:.3f}<br><b>Tarih:</b> %{x}<extra></extra>'
+        };
+
+        const histogramTrace = {
+          x: dates,
+          y: <%= @macd_data[:histogram].to_json %>,
+          type: 'bar',
+          name: 'Histogram',
+          marker: {
+            color: <%= @macd_data[:histogram].to_json %>.map(val => val > 0 ? '#27ae60' : '#e74c3c'),
+            opacity: 0.7
+          },
+          yaxis: 'y3',
+          hovertemplate: '<b>Histogram:</b> %{y:.3f}<br><b>Tarih:</b> %{x}<extra></extra>'
+        };
+        <% end %>
+
+        <% if @bb_data && @bb_data[:upper].any? %>
+        // Bollinger Bantları Trace'leri (ana grafik üzerinde)
+        const bbUpperTrace = {
+          x: dates,
+          y: <%= @bb_data[:upper].to_json %>,
+          type: 'scatter',
+          mode: 'lines',
+          name: 'BB Üst',
+          line: {
+            color: '#8e44ad',
+            width: 1,
+            dash: 'dot'
+          },
+          yaxis: 'y',
+          hovertemplate: '<b>Üst Bant:</b> %{y:.2f} TL<br><b>Tarih:</b> %{x}<extra></extra>',
+          visible: true
+        };
+
+        const bbMiddleTrace = {
+          x: dates,
+          y: <%= @bb_data[:middle].to_json %>,
+          type: 'scatter',
+          mode: 'lines',
+          name: 'BB Orta (SMA20)',
+          line: {
+            color: '#8e44ad',
+            width: 2
+          },
+          yaxis: 'y',
+          hovertemplate: '<b>Orta Bant (SMA20):</b> %{y:.2f} TL<br><b>Tarih:</b> %{x}<extra></extra>',
+          visible: true
+        };
+
+        const bbLowerTrace = {
+          x: dates,
+          y: <%= @bb_data[:lower].to_json %>,
+          type: 'scatter',
+          mode: 'lines',
+          name: 'BB Alt',
+          line: {
+            color: '#8e44ad',
+            width: 1,
+            dash: 'dot'
+          },
+          yaxis: 'y',
+          hovertemplate: '<b>Alt Bant:</b> %{y:.2f} TL<br><b>Tarih:</b> %{x}<extra></extra>',
+          visible: true,
+          fill: 'tonexty',
+          fillcolor: 'rgba(142, 68, 173, 0.1)'
+        };
+        <% end %>
+
         // Tüm trace'leri grafik verisi olarak ekle
-        const allTraces = [candlestickTrace, ma20Trace, ma50Trace, ma200Trace<% if @rsi_data && @rsi_data.length > 0 %>, rsiTrace<% end %>];
+        const allTraces = [candlestickTrace, ma20Trace, ma50Trace, ma200Trace<% if @bb_data && @bb_data[:upper].any? %>, bbUpperTrace, bbMiddleTrace, bbLowerTrace<% end %><% if @rsi_data && @rsi_data.length > 0 %>, rsiTrace<% end %><% if @macd_data && @macd_data[:macd].any? %>, macdTrace, signalTrace, histogramTrace<% end %>];
         
         Plotly.newPlot('priceChart', allTraces, layout, config);
         console.log('Grafik başarıyla oluşturuldu');
@@ -823,6 +976,12 @@
         const ma200Toggle = document.getElementById('ma200Toggle');
         <% if @rsi_data && @rsi_data.length > 0 %>
         const rsiToggle = document.getElementById('rsiToggle');
+        <% end %>
+        <% if @macd_data && @macd_data[:macd].any? %>
+        const macdToggle = document.getElementById('macdToggle');
+        <% end %>
+        <% if @bb_data && @bb_data[:upper].any? %>
+        const bbToggle = document.getElementById('bbToggle');
         <% end %>
         
         // MA20 toggle
@@ -852,12 +1011,46 @@
           const visible = this.checked;
           
           // RSI trace'ini göster/gizle
-          Plotly.restyle('priceChart', {'visible': visible}, [4]); // Index 4 = rsiTrace
+          <% if @bb_data && @bb_data[:upper].any? %>
+          Plotly.restyle('priceChart', {'visible': visible}, [7]); // RSI trace index (BB varsa)
+          <% elsif @macd_data && @macd_data[:macd].any? %>
+          Plotly.restyle('priceChart', {'visible': visible}, [4]); // RSI trace index (sadece MACD varsa)
+          <% else %>
+          Plotly.restyle('priceChart', {'visible': visible}, [4]); // RSI trace index (sadece RSI varsa)
+          <% end %>
           
           // RSI shapes ve annotations'ları güncelle
           updateRSIElements(visible);
           
           console.log('RSI görünürlük:', visible);
+        });
+        <% end %>
+
+        <% if @bb_data && @bb_data[:upper].any? %>
+        // Bollinger Bantları toggle
+        bbToggle.addEventListener('change', function() {
+          const visible = this.checked;
+          
+          // BB trace'lerini göster/gizle (bbUpper=4, bbMiddle=5, bbLower=6)
+          Plotly.restyle('priceChart', {'visible': visible}, [4, 5, 6]);
+          
+          console.log('Bollinger Bantları görünürlük:', visible);
+        });
+        <% end %>
+
+        <% if @macd_data && @macd_data[:macd].any? %>
+        // MACD toggle
+        macdToggle.addEventListener('change', function() {
+          const visible = this.checked;
+          
+          // MACD trace'lerini göster/gizle
+          <% if @bb_data && @bb_data[:upper].any? %>
+          Plotly.restyle('priceChart', {'visible': visible}, [<% if @rsi_data && @rsi_data.length > 0 %>8, 9, 10<% else %>7, 8, 9<% end %>]);
+          <% else %>
+          Plotly.restyle('priceChart', {'visible': visible}, [<% if @rsi_data && @rsi_data.length > 0 %>5, 6, 7<% else %>4, 5, 6<% end %>]);
+          <% end %>
+          
+          console.log('MACD görünürlük:', visible);
         });
         <% end %>
         
@@ -867,6 +1060,12 @@
         const savedMA200 = localStorage.getItem('ma200Visible') === 'true';
         <% if @rsi_data && @rsi_data.length > 0 %>
         const savedRSI = localStorage.getItem('rsiVisible') !== 'false'; // Varsayılan olarak açık
+        <% end %>
+        <% if @macd_data && @macd_data[:macd].any? %>
+        const savedMACD = localStorage.getItem('macdVisible') !== 'false'; // Varsayılan olarak açık
+        <% end %>
+        <% if @bb_data && @bb_data[:upper].any? %>
+        const savedBB = localStorage.getItem('bbVisible') !== 'false'; // Varsayılan olarak açık
         <% end %>
         
         // Kaydedilen durumları uygula
@@ -885,13 +1084,49 @@
         <% if @rsi_data && @rsi_data.length > 0 %>
         if (savedRSI) {
           rsiToggle.checked = true;
+          <% if @bb_data && @bb_data[:upper].any? %>
+          Plotly.restyle('priceChart', {'visible': true}, [7]);
+          <% else %>
           Plotly.restyle('priceChart', {'visible': true}, [4]);
+          <% end %>
           // RSI elementleri zaten başlangıçta eklendi, hiçbir şey yapma
         } else {
           rsiToggle.checked = false;
+          <% if @bb_data && @bb_data[:upper].any? %>
+          Plotly.restyle('priceChart', {'visible': false}, [7]);
+          <% else %>
           Plotly.restyle('priceChart', {'visible': false}, [4]);
+          <% end %>
           // RSI elementlerini gizle
           updateRSIElements(false);
+        }
+        <% end %>
+        
+        <% if @bb_data && @bb_data[:upper].any? %>
+        if (savedBB) {
+          bbToggle.checked = true;
+          Plotly.restyle('priceChart', {'visible': true}, [4, 5, 6]);
+        } else {
+          bbToggle.checked = false;
+          Plotly.restyle('priceChart', {'visible': false}, [4, 5, 6]);
+        }
+        <% end %>
+        
+        <% if @macd_data && @macd_data[:macd].any? %>
+        if (savedMACD) {
+          macdToggle.checked = true;
+          <% if @bb_data && @bb_data[:upper].any? %>
+          Plotly.restyle('priceChart', {'visible': true}, [<% if @rsi_data && @rsi_data.length > 0 %>8, 9, 10<% else %>7, 8, 9<% end %>]);
+          <% else %>
+          Plotly.restyle('priceChart', {'visible': true}, [<% if @rsi_data && @rsi_data.length > 0 %>5, 6, 7<% else %>4, 5, 6<% end %>]);
+          <% end %>
+        } else {
+          macdToggle.checked = false;
+          <% if @bb_data && @bb_data[:upper].any? %>
+          Plotly.restyle('priceChart', {'visible': false}, [<% if @rsi_data && @rsi_data.length > 0 %>8, 9, 10<% else %>7, 8, 9<% end %>]);
+          <% else %>
+          Plotly.restyle('priceChart', {'visible': false}, [<% if @rsi_data && @rsi_data.length > 0 %>5, 6, 7<% else %>4, 5, 6<% end %>]);
+          <% end %>
         }
         <% end %>
         
@@ -908,6 +1143,16 @@
         <% if @rsi_data && @rsi_data.length > 0 %>
         rsiToggle.addEventListener('change', function() {
           localStorage.setItem('rsiVisible', this.checked);
+        });
+        <% end %>
+        <% if @bb_data && @bb_data[:upper].any? %>
+        bbToggle.addEventListener('change', function() {
+          localStorage.setItem('bbVisible', this.checked);
+        });
+        <% end %>
+        <% if @macd_data && @macd_data[:macd].any? %>
+        macdToggle.addEventListener('change', function() {
+          localStorage.setItem('macdVisible', this.checked);
         });
         <% end %>
       }
@@ -1067,9 +1312,79 @@
     color: white !important;
   }
   
+  /* MACD Badge Stilleri */
+  .macd-current-badge {
+    font-size: 0.9rem !important;
+    font-weight: 800 !important;
+    padding: 6px 12px !important;
+    border-radius: 8px !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    letter-spacing: 0.5px !important;
+    border: 2px solid transparent !important;
+    transition: all 0.2s ease !important;
+  }
+  
+  .macd-current-badge:hover {
+    transform: scale(1.05) !important;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.2) !important;
+  }
+  
+  .bg-success.macd-current-badge {
+    background: linear-gradient(135deg, #27ae60, #2ecc71) !important;
+    border-color: #27ae60 !important;
+    color: white !important;
+  }
+  
+  .bg-danger.macd-current-badge {
+    background: linear-gradient(135deg, #e74c3c, #c0392b) !important;
+    border-color: #e74c3c !important;
+    color: white !important;
+  }
+  
+  .bg-secondary.macd-current-badge {
+    background: linear-gradient(135deg, #95a5a6, #bdc3c7) !important;
+    border-color: #95a5a6 !important;
+    color: white !important;
+  }
+  
+  /* Bollinger Bantları Badge Stilleri */
+  .bb-current-badge {
+    font-size: 0.9rem !important;
+    font-weight: 800 !important;
+    padding: 6px 12px !important;
+    border-radius: 8px !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    letter-spacing: 0.5px !important;
+    border: 2px solid transparent !important;
+    transition: all 0.2s ease !important;
+  }
+  
+  .bb-current-badge:hover {
+    transform: scale(1.05) !important;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.2) !important;
+  }
+  
+  .bg-success.bb-current-badge {
+    background: linear-gradient(135deg, #27ae60, #2ecc71) !important;
+    border-color: #27ae60 !important;
+    color: white !important;
+  }
+  
+  .bg-danger.bb-current-badge {
+    background: linear-gradient(135deg, #e74c3c, #c0392b) !important;
+    border-color: #e74c3c !important;
+    color: white !important;
+  }
+  
+  .bg-secondary.bb-current-badge {
+    background: linear-gradient(135deg, #8e44ad, #9b59b6) !important;
+    border-color: #8e44ad !important;
+    color: white !important;
+  }
+  
   /* Responsive */
   @media (max-width: 768px) {
-    .rsi-current-badge {
+    .rsi-current-badge, .macd-current-badge, .bb-current-badge {
       font-size: 0.8rem !important;
       padding: 4px 8px !important;
     }

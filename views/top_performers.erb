@@ -1,12 +1,21 @@
-<div class="container mt-4">
-  <div class="row">
-    <div class="col-12">
-      <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h3 text-primary">📊 BIST TÜM Performans Analizi (Son 2 Yıl)</h1>
-        <a href="/" class="btn btn-outline-primary">
-          ← Ana Sayfaya Dön
+<!-- Compact Header -->
+<div class="compact-header">
+  <div class="container-fluid">
+    <div class="row align-items-center py-3">
+      <div class="col-md-8">
+        <h2 class="page-title mb-1">📊 BIST Performans Analizi</h2>
+        <p class="page-subtitle mb-0">Gerçek zamanlı hisse performansları ve teknik analiz</p>
+      </div>
+      <div class="col-md-4 text-end">
+        <a href="/" class="btn btn-compact-primary">
+          <i class="fas fa-arrow-left me-1"></i>Ana Sayfa
         </a>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="container-fluid px-3">
       
       <% if @error_message %>
         <div class="alert alert-danger">
@@ -15,33 +24,1373 @@
       <% end %>
       
       <% if @performers && @performers.any? %>
-        <!-- Analiz Özeti -->
-        <div class="alert alert-info mb-4">
-          <h6 class="alert-heading">📊 Hızlı Analiz Özeti</h6>
-          <p class="mb-1">
-            <strong><%= @performers.length %></strong> popüler BIST hissesi analiz edildi (3 aylık veri). 
-          </p>
-          <p class="mb-1">
-            <span class="badge bg-success me-2">⚡ Yahoo Finance (Çoklu): <%= @performers.count { |p| p[:source] == 'yahoo_fast_multi' } %> hisse</span>
-            <span class="badge bg-info me-2">🇹🇷 Türk Kaynaklar (Tahmini): <%= @performers.count { |p| p[:source].include?('_fast') && !p[:source].include?('yahoo') } %> hisse</span>
-            <span class="badge bg-warning me-2">📊 RSI Analizi: <%= @performers.count { |p| p[:rsi] } %> hisse</span>
-          </p>
-          <p class="mb-1">
-            <small class="text-muted">
-              <strong>📊 RSI Renk Kodları:</strong>
-              <span class="badge bg-success me-1">0-30 Aşırı Satım (ALIM)</span>
-              <span class="badge bg-info me-1">30-45 Satım Bölgesi</span>
-              <span class="badge bg-secondary me-1">45-55 Nötr</span>
-              <span class="badge bg-warning text-dark me-1">55-70 Alım Bölgesi</span>
-              <span class="badge bg-danger me-1">70-100 Aşırı Alım (SATIM)</span>
-            </small>
-          </p>
+        <!-- Compact Stats -->
+        <div class="compact-stats mb-3">
+          <div class="row g-2">
+            <div class="col-6 col-md-3">
+              <div class="stat-mini">
+                <span class="stat-mini-number"><%= @performers.length %></span>
+                <span class="stat-mini-label">Hisse</span>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="stat-mini">
+                <span class="stat-mini-number"><%= @performers.count { |p| p[:source] == 'yahoo_fast_multi' } %></span>
+                <span class="stat-mini-label">Yahoo Verisi</span>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="stat-mini">
+                <span class="stat-mini-number"><%= @performers.count { |p| p[:rsi] } %></span>
+                <span class="stat-mini-label">RSI Analizi</span>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="stat-mini">
+                <span class="stat-mini-number"><%= @volume_leaders ? @volume_leaders.length : 0 %></span>
+                <span class="stat-mini-label">Hacim Lideri</span>
+              </div>
+            </div>
+          </div>
+          
           <% if @cache_info %>
-            <p class="mb-0">
-              <small class="text-muted">⏱️ <%= @cache_info %> | Cache süresi: 5 dakika</small>
-            </p>
+            <div class="text-center mt-2">
+              <small class="text-muted">
+                <i class="fas fa-clock me-1"></i><%= @cache_info %>
+              </small>
+            </div>
           <% end %>
         </div>
+
+        <!-- Hisse Arama ve Analiz -->
+        <div class="stock-search-section mb-4">
+          <div class="search-card">
+            <div class="search-header">
+              <h6 class="search-title">🔍 Hisse Analizi</h6>
+              <p class="search-subtitle">Herhangi bir BIST hissesini arayın ve performansını analiz edin</p>
+            </div>
+            <div class="search-form">
+              <div class="row g-2 align-items-end">
+                <div class="col-md-4">
+                  <label class="form-label">Hisse Kodu</label>
+                  <input type="text" id="stockSearchInput" class="form-control-search" 
+                         placeholder="Örn: THYAO, AKBNK, GARAN" maxlength="6">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Analiz Dönemi</label>
+                  <select id="searchTimeframe" class="form-control-search">
+                    <option value="1d">1 Gün</option>
+                    <option value="1wk">1 Hafta</option>
+                    <option value="1mo">1 Ay</option>
+                    <option value="3mo">3 Ay</option>
+                    <option value="6mo" selected>6 Ay</option>
+                    <option value="1y">1 Yıl</option>
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <button id="searchStockBtn" class="btn-search">
+                    <i class="fas fa-search me-1"></i>Analiz Et
+                  </button>
+                </div>
+                <div class="col-md-2">
+                  <button id="clearSearchBtn" class="btn-clear" style="display: none;">
+                    <i class="fas fa-times me-1"></i>Temizle
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Arama Sonucu -->
+            <div id="searchResult" class="search-result" style="display: none;">
+              <!-- Dinamik içerik buraya gelecek -->
+            </div>
+            
+            <!-- Loading -->
+            <div id="searchLoading" class="search-loading" style="display: none;">
+              <div class="loading-spinner-small"></div>
+              <span>Hisse analiz ediliyor...</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Modern Design Styles -->
+        <style>
+          /* Compact Header */
+          .compact-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+          }
+          
+          .page-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: white;
+            margin: 0;
+          }
+          
+          .page-subtitle {
+            font-size: 0.9rem;
+            color: rgba(255,255,255,0.8);
+            margin: 0;
+          }
+          
+          .btn-compact-primary {
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+          }
+          
+          .btn-compact-primary:hover {
+            background: rgba(255,255,255,0.3);
+            color: white;
+          }
+          
+          /* Compact Stats */
+          .compact-stats {
+            background: white;
+            border-radius: 10px;
+            padding: 1rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            border: 1px solid #f1f3f4;
+          }
+          
+          .stat-mini {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 0.75rem;
+            text-align: center;
+            transition: all 0.3s ease;
+          }
+          
+          .stat-mini:hover {
+            background: #e9ecef;
+            transform: translateY(-1px);
+          }
+          
+          .stat-mini-number {
+            display: block;
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: #2c3e50;
+            line-height: 1;
+          }
+          
+          .stat-mini-label {
+            display: block;
+            font-size: 0.75rem;
+            color: #6c757d;
+            font-weight: 600;
+            margin-top: 0.25rem;
+          }
+          
+          /* Stock Search Section */
+          .stock-search-section {
+            margin: 0 auto;
+            max-width: 900px;
+          }
+          
+          .search-card {
+            background: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            border: 1px solid #f1f3f4;
+          }
+          
+          .search-header {
+            text-align: center;
+            margin-bottom: 1.5rem;
+          }
+          
+          .search-title {
+            color: #2c3e50;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+          }
+          
+          .search-subtitle {
+            color: #6c757d;
+            font-size: 0.9rem;
+            margin: 0;
+          }
+          
+          .form-label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 0.5rem;
+          }
+          
+          .form-control-search {
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            padding: 0.6rem 0.8rem;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            width: 100%;
+          }
+          
+          .form-control-search:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+            outline: none;
+          }
+          
+          .btn-search {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 0.6rem 1.2rem;
+            font-size: 0.9rem;
+            font-weight: 600;
+            width: 100%;
+            transition: all 0.3s ease;
+            cursor: pointer;
+          }
+          
+          .btn-search:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+          }
+          
+          .btn-clear {
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 0.6rem 1rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            width: 100%;
+            transition: all 0.3s ease;
+            cursor: pointer;
+          }
+          
+          .btn-clear:hover {
+            background: #5a6268;
+          }
+          
+          .search-result {
+            margin-top: 1.5rem;
+            padding: 1.5rem;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 1px solid #e9ecef;
+          }
+          
+          .search-loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            padding: 1rem;
+            color: #6c757d;
+            font-weight: 600;
+          }
+          
+          .loading-spinner-small {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+          }
+          
+          .stock-analysis-card {
+            background: white;
+            border-radius: 10px;
+            padding: 1.25rem;
+            border: 1px solid #dee2e6;
+            margin-bottom: 1rem;
+          }
+          
+          .stock-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid #f1f3f4;
+          }
+          
+          .stock-symbol-large {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: #2c3e50;
+          }
+          
+          .stock-price-large {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #495057;
+          }
+          
+          .performance-comparison {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+          }
+          
+          .comparison-item {
+            text-align: center;
+            padding: 1rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+          }
+          
+          .comparison-label {
+            font-size: 0.8rem;
+            color: #6c757d;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          
+          .comparison-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #2c3e50;
+          }
+          
+          .rank-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: white;
+          }
+          
+          .rank-excellent {
+            background: linear-gradient(135deg, #27ae60, #2ecc71);
+          }
+          
+          .rank-good {
+            background: linear-gradient(135deg, #f39c12, #f1c40f);
+            color: #2c3e50;
+          }
+          
+          .rank-average {
+            background: linear-gradient(135deg, #95a5a6, #bdc3c7);
+          }
+          
+          .rank-poor {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+          }
+          
+          /* Yeni Analiz Bileşenleri */
+          .metric-card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+            border: 1px solid #e9ecef;
+            height: 100%;
+          }
+          
+          .metric-label {
+            font-size: 0.8rem;
+            color: #6c757d;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          
+          .metric-value {
+            margin-bottom: 0.5rem;
+          }
+          
+          .peak-trough-analysis {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 10px;
+            padding: 1.25rem;
+            border: 1px solid #dee2e6;
+          }
+          
+          .analysis-item {
+            background: white;
+            border-radius: 8px;
+            padding: 1rem;
+            border: 1px solid #e9ecef;
+          }
+          
+          .analysis-item > div {
+            margin-bottom: 0.5rem;
+          }
+          
+          .analysis-item > div:last-child {
+            margin-bottom: 0;
+          }
+          
+          .support-resistance {
+            margin-top: 1rem;
+          }
+          
+          .level-card {
+            background: white;
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+            border: 2px solid;
+          }
+          
+          .level-card.resistance {
+            border-color: #e74c3c;
+            background: linear-gradient(135deg, #fff5f5, #ffe6e6);
+          }
+          
+          .level-card.support {
+            border-color: #27ae60;
+            background: linear-gradient(135deg, #f0fff4, #e6ffed);
+          }
+          
+          .level-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          
+          .level-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #2c3e50;
+          }
+          
+          .rsi-analysis, .market-comparison {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 1rem;
+            border: 1px solid #e9ecef;
+          }
+          
+          /* Mobile Responsive for Search */
+          @media (max-width: 768px) {
+            .stock-search-section {
+              margin: 1rem 0.5rem;
+            }
+            
+            .search-card {
+              padding: 1rem;
+            }
+            
+            .search-form .row {
+              --bs-gutter-x: 0.5rem;
+            }
+            
+            .performance-comparison {
+              grid-template-columns: 1fr;
+              gap: 0.75rem;
+            }
+            
+            .comparison-item {
+              padding: 0.75rem;
+            }
+            
+            .stock-header {
+              flex-direction: column;
+              text-align: center;
+              gap: 0.5rem;
+            }
+            
+            .stock-symbol-large {
+              font-size: 1.3rem;
+            }
+            
+            .stock-price-large {
+              font-size: 1.1rem;
+            }
+          }
+          
+          .bg-gradient-success {
+            background: linear-gradient(135deg, #56ab2f, #a8e6cf);
+          }
+          
+          .bg-gradient-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+          }
+          
+          .bg-gradient-warning {
+            background: linear-gradient(135deg, #f093fb, #f5576c);
+          }
+          
+          .bg-gradient-info {
+            background: linear-gradient(135deg, #4facfe, #00f2fe);
+          }
+          
+          .bg-gradient-danger {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+          }
+          
+          /* Final Stats Cards */
+          .final-stats {
+            padding: 2rem 0;
+          }
+          
+          .stat-card-final {
+            background: white;
+            border-radius: 20px;
+            padding: 2rem;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            transition: all 0.3s ease;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+          }
+          
+          .stat-card-final::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: inherit;
+          }
+          
+          .stat-card-final:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+          }
+          
+          .stat-icon-final {
+            width: 70px;
+            height: 70px;
+            margin: 0 auto 1rem;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            color: #495057;
+          }
+          
+          .stat-number-final {
+            font-size: 3rem;
+            font-weight: 900;
+            margin: 0.5rem 0;
+            color: #2c3e50;
+          }
+          
+          .stat-label-final {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #495057;
+            margin: 0.5rem 0;
+          }
+          
+          .stat-detail-final {
+            color: #6c757d;
+            font-size: 0.9rem;
+          }
+          
+          /* Modern Loading */
+          .loading-section {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 400px;
+            padding: 4rem 0;
+          }
+          
+          .loading-card {
+            background: white;
+            border-radius: 20px;
+            padding: 3rem;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            max-width: 400px;
+          }
+          
+          .loading-spinner {
+            margin-bottom: 2rem;
+          }
+          
+          .spinner-modern {
+            width: 60px;
+            height: 60px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+          }
+          
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+          
+          .loading-title {
+            color: #2c3e50;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+          }
+          
+          .loading-subtitle {
+            color: #7f8c8d;
+            margin: 0;
+          }
+          
+          .stat-content h3 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin: 0;
+            color: #2c3e50;
+          }
+          
+          .stat-content p {
+            margin: 0;
+            color: #7f8c8d;
+            font-weight: 600;
+          }
+          
+          /* RSI Legend */
+          .rsi-legend {
+            background: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+          }
+          
+          .legend-title {
+            color: #2c3e50;
+            font-weight: 700;
+            margin-bottom: 1rem;
+          }
+          
+          .legend-items {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+          }
+          
+          .legend-item {
+            padding: 0.5rem 1rem;
+            border-radius: 25px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: white;
+            border: none;
+          }
+          
+          /* Modern Timeframe Selector */
+          .timeframe-selector {
+            display: flex;
+            justify-content: center;
+          }
+          
+          .selector-card {
+            background: white;
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+            max-width: 600px;
+            width: 100%;
+          }
+          
+          .selector-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+          }
+          
+          .selector-icon {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.2rem;
+          }
+          
+          .selector-title {
+            margin: 0;
+            color: #2c3e50;
+            font-weight: 700;
+          }
+          
+          .selector-subtitle {
+            margin: 0;
+            color: #7f8c8d;
+            font-size: 0.9rem;
+          }
+          
+          .form-select-modern {
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+            padding: 0.75rem 1rem;
+            font-weight: 600;
+            background: white;
+            min-width: 250px;
+            transition: all 0.3s ease;
+          }
+          
+          .form-select-modern:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+          }
+          
+          /* Modern Table Cards */
+          .modern-table-card {
+            background: white;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+          }
+          
+          .table-header {
+            padding: 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: white;
+            position: relative;
+          }
+          
+          .table-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="dots" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="10" cy="10" r="1" fill="white" opacity="0.2"/></pattern></defs><rect width="100" height="100" fill="url(%23dots)"/></svg>');
+          }
+          
+          .table-header-content {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            position: relative;
+            z-index: 2;
+          }
+          
+          .table-icon {
+            width: 50px;
+            height: 50px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+          }
+          
+          .table-title {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 800;
+          }
+          
+          .table-subtitle {
+            margin: 0;
+            opacity: 0.9;
+            font-size: 0.9rem;
+          }
+          
+          .timeframe-badge {
+            background: rgba(255,255,255,0.2);
+            padding: 0.5rem 1rem;
+            border-radius: 25px;
+            font-weight: 600;
+            position: relative;
+            z-index: 2;
+          }
+          
+          /* Inline Timeframe Selector */
+          .table-controls {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            position: relative;
+            z-index: 2;
+          }
+          
+          .timeframe-selector-inline {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+          }
+          
+          .selector-label {
+            color: rgba(255,255,255,0.9);
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin: 0;
+          }
+          
+          .form-select-inline {
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 8px;
+            padding: 0.4rem 0.8rem;
+            color: white;
+            font-size: 0.85rem;
+            font-weight: 600;
+            min-width: 100px;
+            transition: all 0.3s ease;
+          }
+          
+          .form-select-inline:focus {
+            background: rgba(255,255,255,0.25);
+            border-color: rgba(255,255,255,0.5);
+            box-shadow: 0 0 0 0.2rem rgba(255,255,255,0.25);
+            color: white;
+          }
+          
+          .form-select-inline option {
+            background: #2c3e50;
+            color: white;
+          }
+          
+          .table-body {
+            padding: 0;
+          }
+          
+          .modern-table {
+            width: 100%;
+            margin: 0;
+            border-collapse: separate;
+            border-spacing: 0;
+          }
+          
+          .modern-table-head th {
+            background: #f8f9fa;
+            padding: 1rem;
+            font-weight: 700;
+            color: #2c3e50;
+            border: none;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          
+          .modern-table tbody tr {
+            transition: all 0.3s ease;
+            border-bottom: 1px solid #f1f3f4;
+          }
+          
+          .modern-table tbody tr:hover {
+            background: #f8f9fa;
+            transform: scale(1.01);
+          }
+          
+          .modern-table tbody td {
+            padding: 1rem;
+            border: none;
+            vertical-align: middle;
+          }
+          
+          /* Mobile-First Responsive Design */
+          
+          /* Tablet Portrait */
+          @media (max-width: 991px) {
+            .hero-section {
+              padding: 3rem 0 2rem;
+            }
+            
+            .hero-title {
+              font-size: 3rem;
+            }
+            
+            .stats-dashboard {
+              margin-top: -1rem;
+            }
+            
+            .stat-card {
+              padding: 1.75rem;
+            }
+            
+            .selector-card {
+              max-width: 500px;
+            }
+          }
+          
+          /* Mobile Landscape */
+          @media (max-width: 768px) {
+            .compact-header .row {
+              flex-direction: column;
+              text-align: center;
+              gap: 0.5rem;
+            }
+            
+            .page-title {
+              font-size: 1.5rem;
+            }
+            
+            .page-subtitle {
+              font-size: 0.8rem;
+            }
+            
+            .btn-compact-primary {
+              padding: 0.4rem 0.8rem;
+              font-size: 0.8rem;
+            }
+            
+            .compact-stats {
+              margin: 1rem 0.5rem;
+              padding: 0.75rem;
+            }
+            
+            .stat-mini {
+              padding: 0.5rem;
+            }
+            
+            .stat-mini-number {
+              font-size: 1.2rem;
+            }
+            
+            .stat-mini-label {
+              font-size: 0.7rem;
+            }
+            
+            .selector-card {
+              flex-direction: column;
+              text-align: center;
+              gap: 1.5rem;
+              padding: 1.5rem;
+            }
+            
+            .form-select-modern {
+              min-width: 100%;
+              width: 100%;
+            }
+            
+            .table-header {
+              flex-direction: column;
+              gap: 1rem;
+              text-align: center;
+              padding: 1.5rem;
+            }
+            
+            .table-controls {
+              justify-content: center;
+            }
+            
+            .timeframe-selector-inline {
+              flex-direction: column;
+              gap: 0.25rem;
+            }
+            
+            .form-select-inline {
+              min-width: 120px;
+            }
+            
+            .table-icon {
+              width: 40px;
+              height: 40px;
+              font-size: 1.1rem;
+            }
+            
+            .table-title {
+              font-size: 1.3rem;
+            }
+            
+            .table-subtitle {
+              font-size: 0.85rem;
+            }
+            
+            /* Mobile Table Optimization */
+            .modern-table {
+              font-size: 0.85rem;
+            }
+            
+            .modern-table-head th {
+              padding: 0.75rem 0.5rem;
+              font-size: 0.75rem;
+            }
+            
+            .modern-table tbody td {
+              padding: 0.75rem 0.5rem;
+            }
+            
+            /* Hide less important columns on mobile */
+            .modern-table th:nth-child(6),
+            .modern-table td:nth-child(6),
+            .modern-table th:nth-child(7),
+            .modern-table td:nth-child(7),
+            .modern-table th:nth-child(8),
+            .modern-table td:nth-child(8) {
+              display: none;
+            }
+            
+            .final-stats {
+              padding: 1.5rem 0;
+            }
+            
+            .stat-card-final {
+              padding: 1.5rem;
+            }
+            
+            .stat-icon-final {
+              width: 60px;
+              height: 60px;
+              font-size: 1.5rem;
+            }
+            
+            .stat-number-final {
+              font-size: 2.5rem;
+            }
+          }
+          
+          /* Mobile Portrait */
+          @media (max-width: 576px) {
+            .container-fluid {
+              padding-left: 1rem;
+              padding-right: 1rem;
+            }
+            
+            .hero-section {
+              padding: 2rem 0 1rem;
+            }
+            
+            .hero-title {
+              font-size: 2rem;
+            }
+            
+            .hero-subtitle {
+              font-size: 0.9rem;
+            }
+            
+            .btn-modern-primary {
+              width: 100%;
+              margin-top: 1rem;
+            }
+            
+            .stats-dashboard .row {
+              --bs-gutter-x: 1rem;
+            }
+            
+            .stat-card {
+              padding: 1.25rem;
+              margin-bottom: 1rem;
+            }
+            
+            .stat-content h3 {
+              font-size: 1.8rem;
+            }
+            
+            .stat-content p {
+              font-size: 0.9rem;
+            }
+            
+            .rsi-legend {
+              padding: 1rem;
+            }
+            
+            .legend-items {
+              flex-direction: column;
+              gap: 0.5rem;
+            }
+            
+            .legend-item {
+              text-align: center;
+              width: 100%;
+            }
+            
+            .selector-card {
+              padding: 1.25rem;
+              margin: 0 0.5rem;
+            }
+            
+            .selector-icon {
+              width: 40px;
+              height: 40px;
+              font-size: 1rem;
+            }
+            
+            .selector-title {
+              font-size: 1rem;
+            }
+            
+            .selector-subtitle {
+              font-size: 0.8rem;
+            }
+            
+            .modern-table-card {
+              margin: 0 -0.5rem 2rem;
+              border-radius: 15px;
+            }
+            
+            .table-header {
+              padding: 1.25rem;
+            }
+            
+            .table-title {
+              font-size: 1.2rem;
+            }
+            
+            /* Mobile-optimized table */
+            .table-responsive {
+              border-radius: 0;
+            }
+            
+            .modern-table {
+              font-size: 0.8rem;
+            }
+            
+            .modern-table-head th {
+              padding: 0.6rem 0.4rem;
+              font-size: 0.7rem;
+              white-space: nowrap;
+            }
+            
+            .modern-table tbody td {
+              padding: 0.6rem 0.4rem;
+              white-space: nowrap;
+            }
+            
+            /* Show only essential columns on small mobile */
+            .modern-table th:nth-child(n+6),
+            .modern-table td:nth-child(n+6) {
+              display: none;
+            }
+            
+            /* Keep only: Rank, Stock, Price, Performance, RSI */
+            .modern-table th:nth-child(5),
+            .modern-table td:nth-child(5),
+            .modern-table th:nth-child(-n+4),
+            .modern-table td:nth-child(-n+4) {
+              display: table-cell;
+            }
+            
+            .badge {
+              font-size: 0.7rem !important;
+              padding: 0.3rem 0.6rem !important;
+            }
+            
+            .btn-sm {
+              font-size: 0.7rem;
+              padding: 0.3rem 0.6rem;
+            }
+            
+            .final-stats .row {
+              --bs-gutter-x: 1rem;
+            }
+            
+            .stat-card-final {
+              padding: 1.25rem;
+              margin-bottom: 1rem;
+            }
+            
+            .stat-number-final {
+              font-size: 2rem;
+            }
+            
+            .stat-label-final {
+              font-size: 1rem;
+            }
+          }
+          
+          /* Extra Small Mobile */
+          @media (max-width: 400px) {
+            .hero-title {
+              font-size: 1.8rem;
+            }
+            
+            .stat-card {
+              padding: 1rem;
+            }
+            
+            .stat-content h3 {
+              font-size: 1.5rem;
+            }
+            
+            .selector-card {
+              padding: 1rem;
+            }
+            
+            .modern-table {
+              font-size: 0.75rem;
+            }
+            
+            .modern-table-head th,
+            .modern-table tbody td {
+              padding: 0.5rem 0.3rem;
+            }
+            
+            .badge {
+              font-size: 0.65rem !important;
+              padding: 0.25rem 0.5rem !important;
+            }
+            
+            .stat-number-final {
+              font-size: 1.8rem;
+            }
+          }
+          
+          /* Mobile Card View */
+          .mobile-card-view {
+            display: none;
+          }
+          
+          @media (max-width: 768px) {
+            .table-responsive {
+              display: none;
+            }
+            
+            .mobile-card-view {
+              display: block;
+              padding: 1rem;
+            }
+            
+            .stock-card {
+              background: white;
+              border-radius: 15px;
+              padding: 1.25rem;
+              margin-bottom: 1rem;
+              box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+              border: 1px solid #f1f3f4;
+              transition: all 0.3s ease;
+            }
+            
+            .stock-card:hover {
+              transform: translateY(-2px);
+              box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+            }
+            
+            .stock-card-header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 1rem;
+              padding-bottom: 0.75rem;
+              border-bottom: 1px solid #f1f3f4;
+            }
+            
+            .stock-rank {
+              width: 35px;
+              height: 35px;
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-weight: 800;
+              font-size: 0.9rem;
+              color: white;
+            }
+            
+            .stock-symbol {
+              font-size: 1.2rem;
+              font-weight: 800;
+              color: #2c3e50;
+              margin: 0;
+            }
+            
+            .stock-price {
+              font-size: 1.1rem;
+              font-weight: 700;
+              color: #495057;
+              margin: 0;
+            }
+            
+            .stock-metrics {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 0.75rem;
+              margin-bottom: 1rem;
+            }
+            
+            .metric-item {
+              text-align: center;
+            }
+            
+            .metric-label {
+              font-size: 0.75rem;
+              color: #6c757d;
+              margin-bottom: 0.25rem;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+            }
+            
+            .metric-value {
+              font-size: 0.9rem;
+              font-weight: 700;
+            }
+            
+            .stock-actions {
+              display: flex;
+              gap: 0.5rem;
+              justify-content: center;
+            }
+            
+            .btn-mobile {
+              flex: 1;
+              padding: 0.5rem;
+              border-radius: 8px;
+              font-size: 0.8rem;
+              font-weight: 600;
+              text-decoration: none;
+              text-align: center;
+              transition: all 0.3s ease;
+            }
+            
+            .btn-mobile-primary {
+              background: linear-gradient(135deg, #667eea, #764ba2);
+              color: white;
+              border: none;
+            }
+            
+            .btn-mobile-secondary {
+              background: #f8f9fa;
+              color: #495057;
+              border: 1px solid #dee2e6;
+            }
+            
+            .btn-mobile:hover,
+            .btn-mobile:active {
+              transform: translateY(-1px);
+            }
+            
+            /* Touch-friendly improvements */
+            .stock-card {
+              -webkit-tap-highlight-color: rgba(0,0,0,0.1);
+              cursor: pointer;
+            }
+            
+            .btn-mobile {
+              -webkit-tap-highlight-color: transparent;
+              touch-action: manipulation;
+            }
+            
+            .form-select-modern {
+              -webkit-appearance: none;
+              -moz-appearance: none;
+              appearance: none;
+              background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+              background-position: right 0.5rem center;
+              background-repeat: no-repeat;
+              background-size: 1.5em 1.5em;
+              padding-right: 2.5rem;
+            }
+          }
+        </style>
         
         <!-- RSI Büyük Görünüm Stilleri -->
         <style>
@@ -125,37 +1474,36 @@
           }
         </style>
         
-        <!-- Zaman Dilimi Seçici -->
-        <div class="row mb-4">
+
+        
+        <!-- En Çok Kazandıranlar -->
+        <div class="row mb-5">
           <div class="col-12">
-            <div class="card bg-light">
-              <div class="card-body">
-                <div class="row align-items-center">
-                  <div class="col-md-6">
-                    <h6 class="mb-0">⏱️ Analiz Zaman Dilimi Seçin</h6>
-                    <small class="text-muted">Tablolar seçilen döneme göre güncellenecek</small>
+            <div class="modern-table-card">
+              <div class="table-header bg-gradient-success">
+                <div class="table-header-content">
+                  <div class="table-icon">
+                    <i class="fas fa-rocket"></i>
                   </div>
-                  <div class="col-md-6">
-                    <select id="timeframeSelector" class="form-select">
-                      <option value="3mo">3 Ay (Kısa Vadeli)</option>
-                      <option value="6mo" selected>6 Ay (Orta Vadeli)</option>
-                      <option value="1y">1 Yıl (Uzun Vadeli)</option>
-                      <option value="2y">2 Yıl (Maksimum Analiz)</option>
+                  <div class="table-title-group">
+                    <h5 class="table-title">En Çok Kazandıranlar</h5>
+                    <p class="table-subtitle">Top 20 performans lideri</p>
+                  </div>
+                </div>
+                <div class="table-controls">
+                  <div class="timeframe-selector-inline">
+                    <label class="selector-label">Zaman Dilimi:</label>
+                    <select id="timeframeSelector" class="form-select-inline">
+                      <option value="1d">1 Gün</option>
+                      <option value="1wk">1 Hafta</option>
+                      <option value="1mo">1 Ay</option>
+                      <option value="3mo">3 Ay</option>
+                      <option value="6mo" selected>6 Ay</option>
+                      <option value="1y">1 Yıl</option>
+                      <option value="2y">2 Yıl</option>
                     </select>
                   </div>
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- En Çok Kazandıranlar -->
-        <div class="row mb-4">
-          <div class="col-12">
-            <div class="card">
-              <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">🚀 En Çok Kazandıranlar (Top 20)</h5>
-                <span id="gainersTimeframe" class="badge bg-light text-dark">6 Ay</span>
               </div>
               <div class="card-body p-0">
                 <div class="table-responsive">
@@ -240,18 +1588,79 @@
                     </tbody>
                   </table>
                 </div>
+                
+                <!-- Mobile Card View for Gainers -->
+                <div class="mobile-card-view" id="gainersCardView">
+                  <% @performers.select { |p| p[:performance] > 0 }.sort_by { |p| -p[:performance] }.first(20).each_with_index do |stock, index| %>
+                    <div class="stock-card" data-stock='<%= stock.to_json %>'>
+                      <div class="stock-card-header">
+                        <div class="d-flex align-items-center gap-3">
+                          <div class="stock-rank bg-success"><%= index + 1 %></div>
+                          <div>
+                            <h6 class="stock-symbol"><%= stock[:symbol] %></h6>
+                            <p class="stock-price"><%= stock[:current_price] %> TL</p>
+                          </div>
+                        </div>
+                        <div class="text-end">
+                          <span class="badge bg-success fs-6">+<%= stock[:performance] %>%</span>
+                        </div>
+                      </div>
+                      
+                      <div class="stock-metrics">
+                        <div class="metric-item">
+                          <div class="metric-label">RSI</div>
+                          <div class="metric-value">
+                            <% if stock[:rsi] && stock[:rsi_analysis] %>
+                              <span class="badge <%= stock[:rsi_analysis][:badge_class] %>"><%= stock[:rsi] %></span>
+                            <% else %>
+                              <span class="text-muted">-</span>
+                            <% end %>
+                          </div>
+                        </div>
+                        <div class="metric-item">
+                          <div class="metric-label">Volatilite</div>
+                          <div class="metric-value"><%= stock[:volatility] %>%</div>
+                        </div>
+                      </div>
+                      
+                      <div class="stock-actions">
+                        <% if stock[:timeframes] %>
+                          <button class="btn-mobile btn-mobile-secondary" 
+                                  data-bs-toggle="modal" 
+                                  data-bs-target="#detailModal<%= stock[:symbol] %>">
+                            📊 Detay
+                          </button>
+                        <% end %>
+                        <a href="/?:symbol=<%= stock[:symbol] %>&range=6mo" 
+                           class="btn-mobile btn-mobile-primary graph-link">
+                          📈 Grafik
+                        </a>
+                      </div>
+                    </div>
+                  <% end %>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
         <!-- En Çok Kaybedenler -->
-        <div class="row mb-4">
+        <div class="row mb-5">
           <div class="col-12">
-            <div class="card">
-              <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">📉 En Çok Kaybedenler (Top 20)</h5>
-                <span id="losersTimeframe" class="badge bg-light text-dark">6 Ay</span>
+            <div class="modern-table-card">
+              <div class="table-header bg-gradient-danger">
+                <div class="table-header-content">
+                  <div class="table-icon">
+                    <i class="fas fa-chart-line-down"></i>
+                  </div>
+                  <div class="table-title-group">
+                    <h5 class="table-title">En Çok Kaybedenler</h5>
+                    <p class="table-subtitle">Top 20 düşüş lideri</p>
+                  </div>
+                </div>
+                <div class="table-badge">
+                  <span id="losersTimeframe" class="timeframe-badge">6 Ay</span>
+                </div>
               </div>
               <div class="card-body p-0">
                 <div class="table-responsive">
@@ -336,18 +1745,79 @@
                     </tbody>
                   </table>
                 </div>
+                
+                <!-- Mobile Card View for Losers -->
+                <div class="mobile-card-view" id="losersCardView">
+                  <% @performers.select { |p| p[:performance] < 0 }.sort_by { |p| p[:performance] }.first(20).each_with_index do |stock, index| %>
+                    <div class="stock-card" data-stock='<%= stock.to_json %>'>
+                      <div class="stock-card-header">
+                        <div class="d-flex align-items-center gap-3">
+                          <div class="stock-rank bg-danger"><%= index + 1 %></div>
+                          <div>
+                            <h6 class="stock-symbol"><%= stock[:symbol] %></h6>
+                            <p class="stock-price"><%= stock[:current_price] %> TL</p>
+                          </div>
+                        </div>
+                        <div class="text-end">
+                          <span class="badge bg-danger fs-6"><%= stock[:performance] %>%</span>
+                        </div>
+                      </div>
+                      
+                      <div class="stock-metrics">
+                        <div class="metric-item">
+                          <div class="metric-label">RSI</div>
+                          <div class="metric-value">
+                            <% if stock[:rsi] && stock[:rsi_analysis] %>
+                              <span class="badge <%= stock[:rsi_analysis][:badge_class] %>"><%= stock[:rsi] %></span>
+                            <% else %>
+                              <span class="text-muted">-</span>
+                            <% end %>
+                          </div>
+                        </div>
+                        <div class="metric-item">
+                          <div class="metric-label">Volatilite</div>
+                          <div class="metric-value"><%= stock[:volatility] %>%</div>
+                        </div>
+                      </div>
+                      
+                      <div class="stock-actions">
+                        <% if stock[:timeframes] %>
+                          <button class="btn-mobile btn-mobile-secondary" 
+                                  data-bs-toggle="modal" 
+                                  data-bs-target="#detailModal<%= stock[:symbol] %>">
+                            📊 Detay
+                          </button>
+                        <% end %>
+                        <a href="/?:symbol=<%= stock[:symbol] %>&range=6mo" 
+                           class="btn-mobile btn-mobile-primary graph-link">
+                          📈 Grafik
+                        </a>
+                      </div>
+                    </div>
+                  <% end %>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
         <!-- En Volatil Hisseler -->
-        <div class="row mb-4">
+        <div class="row mb-5">
           <div class="col-12">
-            <div class="card">
-              <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">⚡ En Volatil Hisseler (Top 20)</h5>
-                <span id="volatileTimeframe" class="badge bg-dark text-light">1 Yıl</span>
+            <div class="modern-table-card">
+              <div class="table-header bg-gradient-warning">
+                <div class="table-header-content">
+                  <div class="table-icon">
+                    <i class="fas fa-bolt"></i>
+                  </div>
+                  <div class="table-title-group">
+                    <h5 class="table-title">En Volatil Hisseler</h5>
+                    <p class="table-subtitle">Top 20 dalgalanma lideri</p>
+                  </div>
+                </div>
+                <div class="table-badge">
+                  <span id="volatileTimeframe" class="timeframe-badge">1 Yıl</span>
+                </div>
               </div>
               <div class="card-body p-0">
                 <div class="table-responsive">
@@ -439,44 +1909,181 @@
           </div>
         </div>
 
-        <!-- İstatistikler -->
-        <div class="row">
-          <div class="col-md-4">
-            <div class="card text-center">
-              <div class="card-body">
-                <h5 class="card-title text-success">📈 Kazanan Hisse</h5>
-                <h2 class="text-success"><%= @performers.count { |p| p[:performance] > 0 } %></h2>
-                <p class="text-muted">Toplam <%= @performers.length %> hisseden</p>
+        <!-- Hacim Liderleri -->
+        <% if @volume_leaders && @volume_leaders.any? %>
+        <div class="row mb-5">
+          <div class="col-12">
+            <div class="modern-table-card">
+              <div class="table-header bg-gradient-info">
+                <div class="table-header-content">
+                  <div class="table-icon">
+                    <i class="fas fa-fire"></i>
+                  </div>
+                  <div class="table-title-group">
+                    <h5 class="table-title">Hacim Liderleri</h5>
+                    <p class="table-subtitle">Top 20 en aktif işlem gören</p>
+                  </div>
+                </div>
+                <div class="table-badge">
+                  <span id="volumeTimeframe" class="timeframe-badge">1 Yıl Ortalama</span>
+                </div>
+              </div>
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <th>Sıra</th>
+                        <th>Hisse</th>
+                        <th>Güncel Fiyat</th>
+                        <th>Performans <span id="volumePerformanceLabel">(6 Ay)</span></th>
+                        <th>RSI <span id="volumeRsiLabel">(14)</span></th>
+                        <th>Ortalama Hacim</th>
+                        <th>Güncel Hacim</th>
+                        <th>Hacim Oranı</th>
+                        <th>Hacim Trendi</th>
+                        <th>Grafik</th>
+                      </tr>
+                    </thead>
+                    <tbody id="volumeTableBody">
+                      <% @volume_leaders.each_with_index do |stock, index| %>
+                        <tr data-stock='<%= stock.to_json %>'>
+                          <td><span class="badge bg-info"><%= index + 1 %></span></td>
+                          <td>
+                            <strong><%= stock[:symbol] %></strong>
+                            <% if stock[:timeframes] %>
+                              <br><small class="text-muted">Çoklu Analiz</small>
+                            <% end %>
+                          </td>
+                          <td><%= stock[:current_price] %> TL</td>
+                          <td class="performance-cell">
+                            <span class="badge <%= stock[:performance] > 0 ? 'bg-success' : 'bg-danger' %> fs-6">
+                              <%= stock[:performance] > 0 ? '+' : '' %><%= stock[:performance] %>%
+                            </span>
+                          </td>
+                          <td class="rsi-cell">
+                            <% if stock[:rsi] && stock[:rsi_analysis] %>
+                              <span class="badge <%= stock[:rsi_analysis][:badge_class] %> fs-6" 
+                                    title="<%= stock[:rsi_analysis][:level] %> - <%= stock[:rsi_analysis][:signal] %>">
+                                <%= stock[:rsi] %>
+                              </span>
+                              <br><small class="text-muted"><%= stock[:rsi_analysis][:signal] %></small>
+                            <% else %>
+                              <span class="text-muted">-</span>
+                            <% end %>
+                          </td>
+                          <td class="volume-avg-cell">
+                            <% if stock[:volume_metrics] %>
+                              <span class="badge bg-primary fs-6">
+                                <%= format_volume(stock[:volume_metrics][:avg_volume]) %>
+                              </span>
+                            <% else %>
+                              <span class="text-muted">-</span>
+                            <% end %>
+                          </td>
+                          <td class="volume-current-cell">
+                            <% if stock[:volume_metrics] %>
+                              <span class="badge bg-secondary fs-6">
+                                <%= format_volume(stock[:volume_metrics][:current_volume]) %>
+                              </span>
+                            <% else %>
+                              <span class="text-muted">-</span>
+                            <% end %>
+                          </td>
+                          <td class="volume-ratio-cell">
+                            <% if stock[:volume_metrics] %>
+                              <span class="badge bg-<%= stock[:volume_metrics][:volume_ratio] > 1.5 ? 'warning' : stock[:volume_metrics][:volume_ratio] > 1 ? 'success' : 'secondary' %> fs-6">
+                                <%= stock[:volume_metrics][:volume_ratio] %>x
+                              </span>
+                            <% else %>
+                              <span class="text-muted">-</span>
+                            <% end %>
+                          </td>
+                          <td class="volume-trend-cell">
+                            <% if stock[:volume_metrics] %>
+                              <span class="badge bg-<%= 
+                                case stock[:volume_metrics][:volume_trend]
+                                when 'Çok Yüksek' then 'danger'
+                                when 'Yüksek' then 'warning'
+                                when 'Normal' then 'success'
+                                else 'secondary'
+                                end
+                              %> fs-6">
+                                <%= stock[:volume_metrics][:volume_trend] %>
+                              </span>
+                            <% else %>
+                              <span class="text-muted">-</span>
+                            <% end %>
+                          </td>
+                          <td>
+                            <a href="/?:symbol=<%= stock[:symbol] %>&range=1y" 
+                               class="btn btn-sm btn-outline-primary graph-link">
+                              Grafik
+                            </a>
+                          </td>
+                        </tr>
+                      <% end %>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
-          <div class="col-md-4">
-            <div class="card text-center">
-              <div class="card-body">
-                <h5 class="card-title text-danger">📉 Kaybeden Hisse</h5>
-                <h2 class="text-danger"><%= @performers.count { |p| p[:performance] < 0 } %></h2>
-                <p class="text-muted">Toplam <%= @performers.length %> hisseden</p>
+        </div>
+        <% end %>
+
+        <!-- Modern İstatistikler -->
+        <div class="final-stats mt-5">
+          <div class="row g-4">
+            <div class="col-md-4">
+              <div class="stat-card-final bg-gradient-success">
+                <div class="stat-icon-final">
+                  <i class="fas fa-arrow-trend-up"></i>
+                </div>
+                <div class="stat-content-final">
+                  <h3 class="stat-number-final"><%= @performers.count { |p| p[:performance] > 0 } %></h3>
+                  <p class="stat-label-final">Kazanan Hisse</p>
+                  <small class="stat-detail-final">Toplam <%= @performers.length %> hisseden</small>
+                </div>
               </div>
             </div>
-          </div>
-          <div class="col-md-4">
-            <div class="card text-center">
-              <div class="card-body">
-                <h5 class="card-title text-primary">📊 Ortalama Performans</h5>
-                <h2 class="<%= @performers.map { |p| p[:performance] }.sum / @performers.length > 0 ? 'text-success' : 'text-danger' %>">
-                  <%= (@performers.map { |p| p[:performance] }.sum / @performers.length).round(2) %>%
-                </h2>
-                <p class="text-muted">Son 2 yıl</p>
+            <div class="col-md-4">
+              <div class="stat-card-final bg-gradient-danger">
+                <div class="stat-icon-final">
+                  <i class="fas fa-arrow-trend-down"></i>
+                </div>
+                <div class="stat-content-final">
+                  <h3 class="stat-number-final"><%= @performers.count { |p| p[:performance] < 0 } %></h3>
+                  <p class="stat-label-final">Kaybeden Hisse</p>
+                  <small class="stat-detail-final">Toplam <%= @performers.length %> hisseden</small>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="stat-card-final bg-gradient-primary">
+                <div class="stat-icon-final">
+                  <i class="fas fa-chart-pie"></i>
+                </div>
+                <div class="stat-content-final">
+                  <h3 class="stat-number-final <%= @performers.map { |p| p[:performance] }.sum / @performers.length > 0 ? 'text-success' : 'text-danger' %>">
+                    <%= (@performers.map { |p| p[:performance] }.sum / @performers.length).round(2) %>%
+                  </h3>
+                  <p class="stat-label-final">Ortalama Performans</p>
+                  <small class="stat-detail-final">Son analiz dönemi</small>
+                </div>
               </div>
             </div>
           </div>
         </div>
       <% else %>
-        <div class="text-center py-5">
-          <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Yükleniyor...</span>
+        <div class="loading-section">
+          <div class="loading-card">
+            <div class="loading-spinner">
+              <div class="spinner-modern"></div>
+            </div>
+            <h4 class="loading-title">Veriler Yükleniyor</h4>
+            <p class="loading-subtitle">BIST hisse performansları analiz ediliyor...</p>
           </div>
-          <p class="mt-3">Veriler yükleniyor...</p>
         </div>
       <% end %>
     </div>
@@ -522,7 +2129,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <% ['3mo', '6mo', '1y', '2y'].each do |period| %>
+                  <% ['1d', '1wk', '1mo', '3mo', '6mo', '1y', '2y'].each do |period| %>
                     <% if stock[:timeframes][period] %>
                       <% tf = stock[:timeframes][period] %>
                       <tr>
@@ -596,8 +2203,20 @@
 document.addEventListener('DOMContentLoaded', function() {
     const timeframeSelector = document.getElementById('timeframeSelector');
     
+    // Timeframe selector kontrolü
+    if (!timeframeSelector) {
+        console.error('Timeframe selector bulunamadı!');
+        return;
+    }
+    
+    console.log('Timeframe selector bulundu:', timeframeSelector);
+    console.log('Timeframe selector değeri:', timeframeSelector ? timeframeSelector.value : 'null');
+    
     // Zaman dilimi etiketleri
     const timeframeLabels = {
+        '1d': '1 Gün',
+        '1wk': '1 Hafta',
+        '1mo': '1 Ay',
         '3mo': '3 Ay',
         '6mo': '6 Ay', 
         '1y': '1 Yıl',
@@ -606,7 +2225,12 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Tablo güncelleyici fonksiyon
     function updateTables(selectedTimeframe) {
-        console.log('Updating tables for timeframe:', selectedTimeframe);
+        console.log('updateTables çağrıldı:', selectedTimeframe);
+        
+        if (!selectedTimeframe) {
+            console.error('Timeframe boş!');
+            return;
+        }
         
         // Header etiketlerini güncelle
         updateHeaders(selectedTimeframe);
@@ -615,6 +2239,7 @@ document.addEventListener('DOMContentLoaded', function() {
         updateTableData('gainersTableBody', selectedTimeframe, 'performance', true);
         updateTableData('losersTableBody', selectedTimeframe, 'performance', false);
         updateTableData('volatileTableBody', selectedTimeframe, 'volatility', null);
+        updateTableData('volumeTableBody', selectedTimeframe, 'volume', null);
         
         // Grafik linklerini güncelle
         updateGraphLinks(selectedTimeframe);
@@ -623,30 +2248,69 @@ document.addEventListener('DOMContentLoaded', function() {
     // Header etiketlerini güncelle
     function updateHeaders(timeframe) {
         const label = timeframeLabels[timeframe];
+        console.log('Header güncelleniyor:', timeframe, label);
         
-        // Timeframe badge'lerini güncelle
-        document.getElementById('gainersTimeframe').textContent = label;
-        document.getElementById('losersTimeframe').textContent = label;
-        document.getElementById('volatileTimeframe').textContent = label;
+        // Güvenli element güncelleme fonksiyonu
+        function safeUpdateElement(id, text) {
+            const element = document.getElementById(id);
+            if (element) {
+                element.textContent = text;
+                console.log(`${id} güncellendi:`, text);
+            } else {
+                console.warn(`Element bulunamadı: ${id}`);
+            }
+        }
         
-        // Tablo header'larını güncelle
-        document.getElementById('gainersPerformanceLabel').textContent = `(${label})`;
-        document.getElementById('losersPerformanceLabel').textContent = `(${label})`;
-        document.getElementById('volatilePerformanceLabel').textContent = `(${label})`;
-        document.getElementById('volatileVolatilityLabel').textContent = `(${label})`;
+        // Timeframe badge'lerini güncelle (varsa)
+        safeUpdateElement('gainersTimeframe', label);
+        safeUpdateElement('losersTimeframe', label);
+        safeUpdateElement('volatileTimeframe', label);
+        safeUpdateElement('volumeTimeframe', label + ' Ortalama');
         
-        document.getElementById('gainersHighLabel').textContent = `(${label})`;
-        document.getElementById('gainersLowLabel').textContent = `(${label})`;
-        document.getElementById('losersHighLabel').textContent = `(${label})`;
-        document.getElementById('losersLowLabel').textContent = `(${label})`;
-        document.getElementById('volatileHighLabel').textContent = `(${label})`;
-        document.getElementById('volatileLowLabel').textContent = `(${label})`;
+        // Tablo header'larını güncelle (varsa)
+        safeUpdateElement('gainersPerformanceLabel', `(${label})`);
+        safeUpdateElement('losersPerformanceLabel', `(${label})`);
+        safeUpdateElement('volatilePerformanceLabel', `(${label})`);
+        safeUpdateElement('volatileVolatilityLabel', `(${label})`);
+        safeUpdateElement('volumePerformanceLabel', `(${label})`);
+        
+        safeUpdateElement('gainersHighLabel', `(${label})`);
+        safeUpdateElement('gainersLowLabel', `(${label})`);
+        safeUpdateElement('losersHighLabel', `(${label})`);
+        safeUpdateElement('losersLowLabel', `(${label})`);
+        safeUpdateElement('volatileHighLabel', `(${label})`);
+        safeUpdateElement('volatileLowLabel', `(${label})`);
+        
+        // Timeframe selector'ın kendisini de güncelle
+        if (timeframeSelector) {
+            timeframeSelector.value = timeframe;
+            console.log('Timeframe selector değeri güncellendi:', timeframe);
+        }
     }
     
     // Tablo verilerini güncelle
     function updateTableData(tableBodyId, timeframe, sortBy, isGainers) {
+        console.log('updateTableData çağrıldı:', tableBodyId, timeframe, sortBy, isGainers);
+        
         const tableBody = document.getElementById(tableBodyId);
+        if (!tableBody) {
+            console.error('Tablo bulunamadı:', tableBodyId);
+            return;
+        }
+        
         const rows = Array.from(tableBody.querySelectorAll('tr'));
+        console.log('Bulunan satır sayısı:', rows.length);
+        
+        // Mobil kart görünümü için ID mapping
+        const cardViewIds = {
+            'gainersTableBody': 'gainersCardView',
+            'losersTableBody': 'losersCardView',
+            'volatileTableBody': 'volatileCardView',
+            'volumeTableBody': 'volumeCardView'
+        };
+        
+        const cardView = document.getElementById(cardViewIds[tableBodyId]);
+        const cards = cardView ? Array.from(cardView.querySelectorAll('.stock-card')) : [];
         
         // Her satır için veriyi güncelle
         rows.forEach(row => {
@@ -667,7 +2331,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 volatility = stockData.volatility || 10;
                 
                 // Basit tahmin
-                const multiplier = timeframe === '3mo' ? 0.5 : timeframe === '6mo' ? 1 : timeframe === '1y' ? 1.5 : 2;
+                const multiplier = timeframe === '1d' ? 0.1 : 
+                                 timeframe === '1wk' ? 0.2 : 
+                                 timeframe === '1mo' ? 0.3 : 
+                                 timeframe === '3mo' ? 0.5 : 
+                                 timeframe === '6mo' ? 1 : 
+                                 timeframe === '1y' ? 1.5 : 2;
                 maxHigh = (stockData.current_price * (1 + (volatility * multiplier / 100))).toFixed(2);
                 minLow = (stockData.current_price * (1 - (volatility * multiplier * 0.7 / 100))).toFixed(2);
             }
@@ -700,7 +2369,51 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             // Sıralama için veriyi sakla
-            row.dataset.sortValue = sortBy === 'performance' ? performance : volatility;
+            if (sortBy === 'volume') {
+                // Hacim tablosu için ortalama hacmi kullan
+                const avgVolume = stockData.volume_metrics ? stockData.volume_metrics.avg_volume : 0;
+                row.dataset.sortValue = avgVolume;
+            } else {
+                row.dataset.sortValue = sortBy === 'performance' ? performance : volatility;
+            }
+        });
+        
+        // Mobil kartları da güncelle
+        cards.forEach(card => {
+            const stockData = JSON.parse(card.getAttribute('data-stock'));
+            
+            // Seçilen zaman dilimi için veriyi al
+            let performance, volatility;
+            
+            if (stockData.timeframes && stockData.timeframes[timeframe]) {
+                const tf = stockData.timeframes[timeframe];
+                performance = tf.performance;
+                volatility = tf.volatility;
+            } else {
+                performance = stockData.performance || 0;
+                volatility = stockData.volatility || 10;
+            }
+            
+            // Mobil karttaki performans badge'ini güncelle
+            const performanceBadge = card.querySelector('.stock-card-header .badge');
+            if (performanceBadge) {
+                performanceBadge.textContent = `${performance > 0 ? '+' : ''}${performance}%`;
+                performanceBadge.className = `badge fs-6 ${performance > 0 ? 'bg-success' : 'bg-danger'}`;
+            }
+            
+            // Volatilite değerini güncelle
+            const volatilityMetric = card.querySelector('.metric-item:last-child .metric-value');
+            if (volatilityMetric) {
+                volatilityMetric.textContent = `${volatility}%`;
+            }
+            
+            // Sıralama için veriyi sakla
+            if (sortBy === 'volume') {
+                const avgVolume = stockData.volume_metrics ? stockData.volume_metrics.avg_volume : 0;
+                card.dataset.sortValue = avgVolume;
+            } else {
+                card.dataset.sortValue = sortBy === 'performance' ? performance : volatility;
+            }
         });
         
         // Tabloyu yeniden sırala
@@ -733,6 +2446,41 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             tableBody.appendChild(row);
         });
+        
+        // Mobil kartları da sırala
+        const cardViewIds = {
+            'gainersTableBody': 'gainersCardView',
+            'losersTableBody': 'losersCardView',
+            'volatileTableBody': 'volatileCardView',
+            'volumeTableBody': 'volumeCardView'
+        };
+        
+        const cardView = document.getElementById(cardViewIds[tableBodyId]);
+        if (cardView) {
+            const cards = Array.from(cardView.querySelectorAll('.stock-card'));
+            
+            cards.sort((a, b) => {
+                const aValue = parseFloat(a.dataset.sortValue);
+                const bValue = parseFloat(b.dataset.sortValue);
+                
+                if (isGainers === true) {
+                    return bValue - aValue;
+                } else if (isGainers === false) {
+                    return aValue - bValue;
+                } else {
+                    return bValue - aValue;
+                }
+            });
+            
+            // Mobil kartların sıra numaralarını güncelle
+            cards.forEach((card, index) => {
+                const rankBadge = card.querySelector('.stock-rank');
+                if (rankBadge) {
+                    rankBadge.textContent = index + 1;
+                }
+                cardView.appendChild(card);
+            });
+        }
     }
     
     // Grafik linklerini güncelle
@@ -745,10 +2493,17 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Select box değişiklik eventi
-    timeframeSelector.addEventListener('change', function() {
-        const selectedTimeframe = this.value;
-        updateTables(selectedTimeframe);
-    });
+    if (timeframeSelector) {
+        timeframeSelector.addEventListener('change', function() {
+            const selectedTimeframe = this.value;
+            console.log('Timeframe değişti:', selectedTimeframe);
+            updateTables(selectedTimeframe);
+        });
+        
+        console.log('Event listener eklendi');
+    } else {
+        console.error('Timeframe selector bulunamadığı için event listener eklenemedi');
+    }
     
     // RSI hücrelerini büyüt ve güzelleştir
     function enhanceRSICells() {
@@ -788,7 +2543,11 @@ document.addEventListener('DOMContentLoaded', function() {
     enhanceRSICells();
     
     // Sayfa yüklendiğinde varsayılan olarak 6mo seçili
+    console.log('Sayfa yüklendi, varsayılan timeframe ayarlanıyor...');
     updateTables('6mo');
+    
+    // Hisse arama fonksiyonalitesi
+    setupStockSearch();
     
     // Tablo güncellendiğinde RSI hücrelerini tekrar güzelleştir
     const originalUpdateTables = updateTables;
@@ -796,5 +2555,310 @@ document.addEventListener('DOMContentLoaded', function() {
         originalUpdateTables(selectedTimeframe);
         setTimeout(enhanceRSICells, 100); // Kısa gecikme ile
     };
+    
+    // Hisse arama fonksiyonalitesi
+    function setupStockSearch() {
+        const searchInput = document.getElementById('stockSearchInput');
+        const searchBtn = document.getElementById('searchStockBtn');
+        const clearBtn = document.getElementById('clearSearchBtn');
+        const searchTimeframe = document.getElementById('searchTimeframe');
+        const searchResult = document.getElementById('searchResult');
+        const searchLoading = document.getElementById('searchLoading');
+        
+        if (!searchInput || !searchBtn) {
+            console.warn('Arama elementleri bulunamadı');
+            return;
+        }
+        
+        // Arama butonu click eventi
+        searchBtn.addEventListener('click', function() {
+            const symbol = searchInput.value.trim().toUpperCase();
+            const timeframe = searchTimeframe.value;
+            
+            if (!symbol) {
+                alert('Lütfen bir hisse kodu girin (örn: THYAO)');
+                return;
+            }
+            
+            if (symbol.length < 3 || symbol.length > 6) {
+                alert('Hisse kodu 3-6 karakter arasında olmalıdır');
+                return;
+            }
+            
+            searchStock(symbol, timeframe);
+        });
+        
+        // Enter tuşu ile arama
+        searchInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchBtn.click();
+            }
+        });
+        
+        // Temizle butonu
+        clearBtn.addEventListener('click', function() {
+            searchInput.value = '';
+            searchResult.style.display = 'none';
+            clearBtn.style.display = 'none';
+            searchInput.focus();
+        });
+        
+        // Input değişikliğinde temizle butonunu göster/gizle
+        searchInput.addEventListener('input', function() {
+            if (this.value.trim()) {
+                clearBtn.style.display = 'block';
+            } else {
+                clearBtn.style.display = 'none';
+                searchResult.style.display = 'none';
+            }
+        });
+    }
+    
+    // Hisse arama fonksiyonu
+    function searchStock(symbol, timeframe) {
+        const searchResult = document.getElementById('searchResult');
+        const searchLoading = document.getElementById('searchLoading');
+        
+        // Loading göster
+        searchLoading.style.display = 'flex';
+        searchResult.style.display = 'none';
+        
+        // API çağrısı
+        fetch(`/search-stock/${symbol}?timeframe=${timeframe}`)
+            .then(response => response.json())
+            .then(data => {
+                searchLoading.style.display = 'none';
+                
+                if (data.success) {
+                    displaySearchResult(data);
+                } else {
+                    displaySearchError(data.error || 'Hisse bulunamadı');
+                }
+            })
+            .catch(error => {
+                console.error('Arama hatası:', error);
+                searchLoading.style.display = 'none';
+                displaySearchError('Arama sırasında bir hata oluştu');
+            });
+    }
+    
+    // Arama sonucunu göster
+    function displaySearchResult(data) {
+        const searchResult = document.getElementById('searchResult');
+        const stock = data.stock;
+        const comparison = data.comparison;
+        const peakTrough = data.peak_trough || {};
+        const timeframe = data.timeframe;
+        
+        const timeframeLabels = {
+            '1d': '1 Gün',
+            '1wk': '1 Hafta',
+            '1mo': '1 Ay',
+            '3mo': '3 Ay',
+            '6mo': '6 Ay',
+            '1y': '1 Yıl',
+            '2y': '2 Yıl'
+        };
+        
+        // Yüzdelik badge class'ı belirle
+        function getPercentileBadgeClass(percentile) {
+            if (!percentile) return 'bg-secondary';
+            if (percentile >= 80) return 'bg-success';
+            if (percentile >= 60) return 'bg-info';
+            if (percentile >= 40) return 'bg-warning text-dark';
+            return 'bg-danger';
+        }
+        
+        // Dip-zirve analizi için ana zaman dilimini seç
+        const mainPeriod = peakTrough['6mo'] || peakTrough['3mo'] || peakTrough['1y'] || null;
+        
+        const html = `
+            <div class="stock-analysis-card">
+                <div class="stock-header">
+                    <div>
+                        <h5 class="stock-symbol-large">${stock.symbol}</h5>
+                        <p class="stock-price-large">${stock.current_price} TL</p>
+                    </div>
+                    <div class="text-end">
+                        <span class="badge ${stock.performance > 0 ? 'bg-success' : 'bg-danger'} fs-6">
+                            ${stock.performance > 0 ? '+' : ''}${stock.performance}%
+                        </span>
+                        <br><small class="text-muted">${timeframeLabels[timeframe]} Performans</small>
+                    </div>
+                </div>
+                
+                <!-- Yüzdelik Sıralamalar -->
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <div class="metric-card">
+                            <div class="metric-label">Performans Yüzdeliği</div>
+                            ${comparison.performance_percentile ? `
+                                <div class="metric-value">
+                                    <span class="badge ${getPercentileBadgeClass(comparison.performance_percentile)} fs-6">
+                                        %${comparison.performance_percentile}
+                                    </span>
+                                </div>
+                                <small class="text-muted">Piyasanın %${comparison.performance_percentile}'inden daha iyi</small>
+                            ` : '<div class="metric-value text-muted">Veri Yok</div>'}
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="metric-card">
+                            <div class="metric-label">Volatilite Yüzdeliği</div>
+                            ${comparison.volatility_percentile ? `
+                                <div class="metric-value">
+                                    <span class="badge ${getPercentileBadgeClass(comparison.volatility_percentile)} fs-6">
+                                        %${comparison.volatility_percentile}
+                                    </span>
+                                </div>
+                                <small class="text-muted">Piyasanın %${comparison.volatility_percentile}'inden daha stabil</small>
+                            ` : '<div class="metric-value text-muted">Veri Yok</div>'}
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="metric-card">
+                            <div class="metric-label">Genel Skor</div>
+                            ${comparison.overall_percentile ? `
+                                <div class="metric-value">
+                                    <span class="badge ${getPercentileBadgeClass(comparison.overall_percentile)} fs-6">
+                                        %${comparison.overall_percentile}
+                                    </span>
+                                </div>
+                                <small class="text-muted">Toplam performans skoru</small>
+                            ` : '<div class="metric-value text-muted">Veri Yok</div>'}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Dip-Zirve Analizi -->
+                ${mainPeriod ? `
+                    <div class="peak-trough-analysis mb-3">
+                        <h6 class="text-primary mb-3">
+                            <i class="fas fa-mountain me-2"></i>Dip-Zirve Analizi (${mainPeriod.period_label})
+                        </h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="analysis-item">
+                                    <div class="d-flex justify-content-between">
+                                        <span>🏔️ Zirve Seviyesi:</span>
+                                        <strong>${mainPeriod.max_high} TL</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span>🕳️ Dip Seviyesi:</span>
+                                        <strong>${mainPeriod.min_low} TL</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span>📍 Mevcut Pozisyon:</span>
+                                        <strong>%${mainPeriod.range_position}</strong>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="analysis-item">
+                                    <div class="d-flex justify-content-between">
+                                        <span>⬆️ Zirveye Mesafe:</span>
+                                        <strong class="${mainPeriod.distance_to_peak > 0 ? 'text-success' : 'text-danger'}">
+                                            ${mainPeriod.distance_to_peak > 0 ? '+' : ''}${mainPeriod.distance_to_peak}%
+                                        </strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span>⬇️ Dipten Mesafe:</span>
+                                        <strong class="text-info">+${mainPeriod.distance_from_trough}%</strong>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span>⚖️ Risk/Getiri:</span>
+                                        <strong class="${mainPeriod.risk_reward_ratio > 1 ? 'text-success' : 'text-warning'}">
+                                            ${mainPeriod.risk_reward_ratio}
+                                        </strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Destek/Direnç Seviyeleri -->
+                        <div class="support-resistance mt-3">
+                            <div class="row">
+                                <div class="col-6">
+                                    <div class="level-card resistance">
+                                        <div class="level-label">🔴 Direnç Seviyesi</div>
+                                        <div class="level-value">${mainPeriod.resistance_level} TL</div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="level-card support">
+                                        <div class="level-label">🟢 Destek Seviyesi</div>
+                                        <div class="level-value">${mainPeriod.support_level} TL</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ` : ''}
+                
+                <!-- RSI Analizi -->
+                ${stock.rsi ? `
+                    <div class="rsi-analysis mb-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span>📊 RSI (14):</span>
+                            <div>
+                                <span class="badge ${stock.rsi_analysis?.badge_class || 'bg-secondary'} me-2">${stock.rsi}</span>
+                                <small class="text-muted">${stock.rsi_analysis?.signal || 'Belirsiz'}</small>
+                            </div>
+                        </div>
+                    </div>
+                ` : ''}
+                
+                <!-- Piyasa Karşılaştırması -->
+                <div class="market-comparison mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>📈 Piyasa Ort. Performans:</span>
+                        <strong class="${comparison.market_avg_performance > 0 ? 'text-success' : 'text-danger'}">
+                            ${comparison.market_avg_performance ? `${comparison.market_avg_performance > 0 ? '+' : ''}${comparison.market_avg_performance}%` : 'N/A'}
+                        </strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>📊 Toplam Analiz Edilen:</span>
+                        <strong>${comparison.total_stocks} hisse</strong>
+                    </div>
+                </div>
+                
+                <div class="text-center mt-3">
+                    <a href="/?:symbol=${stock.symbol}&range=${timeframe}" 
+                       class="btn btn-primary btn-sm" target="_blank">
+                        <i class="fas fa-chart-line me-1"></i>Detaylı Grafik Analizi
+                    </a>
+                    ${data.source === 'estimated' ? 
+                        '<br><small class="text-warning mt-2 d-block"><i class="fas fa-info-circle me-1"></i>Tahmini veriler kullanılmıştır</small>' : 
+                        ''
+                    }
+                </div>
+            </div>
+        `;
+        
+        searchResult.innerHTML = html;
+        searchResult.style.display = 'block';
+        
+        // Sonuca scroll
+        searchResult.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    
+    // Arama hatası göster
+    function displaySearchError(errorMessage) {
+        const searchResult = document.getElementById('searchResult');
+        
+        const html = `
+            <div class="alert alert-warning text-center">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <strong>Hisse Bulunamadı</strong><br>
+                <small>${errorMessage}</small><br>
+                <small class="text-muted mt-2 d-block">
+                    Lütfen geçerli bir BIST hisse kodu girin (örn: THYAO, AKBNK, GARAN)
+                </small>
+            </div>
+        `;
+        
+        searchResult.innerHTML = html;
+        searchResult.style.display = 'block';
+    }
 });
 </script>
