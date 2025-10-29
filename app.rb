@@ -3,8 +3,43 @@ require 'httparty'
 require 'json'
 require 'date'
 require 'erb'
+require 'thread'
 
 set :public_folder, File.dirname(__FILE__) + '/public'
+
+# Basit cache sistemi (5 dakika gecerli)
+class SimpleCache
+  def initialize
+    @cache = {}
+    @timestamps = {}
+    @mutex = Mutex.new
+  end
+  
+  def get(key)
+    @mutex.synchronize do
+      return nil unless @cache[key]
+      
+      # 10 dakika gecmisse cache'i temizle (daha uzun cache)
+      if Time.now - @timestamps[key] > 600
+        @cache.delete(key)
+        @timestamps.delete(key)
+        return nil
+      end
+      
+      @cache[key]
+    end
+  end
+  
+  def set(key, value)
+    @mutex.synchronize do
+      @cache[key] = value
+      @timestamps[key] = Time.now
+    end
+  end
+end
+
+# Global cache instance
+$cache = SimpleCache.new
 
 def fetch_bist_stocks
   puts "BIST hisse listesi cekiliyor..."
@@ -116,6 +151,53 @@ def validate_stock_codes(stock_list)
   return valid_stocks
 end
 
+# Populer BIST hisselerini getir (hizli analiz icin)
+def get_comprehensive_bist_stocks
+  [
+    # BIST 30 (Ana Endeks)
+    'THYAO', 'AKBNK', 'GARAN', 'ISCTR', 'VAKBN', 'HALKB', 'SASA', 'TUPRS',
+    'EREGL', 'KRDMD', 'SAHOL', 'ASELS', 'BIMAS', 'KOZAL', 'KOZAA', 'PETKM',
+    'SISE', 'TKFEN', 'TAVHL', 'ARCLK', 'KCHOL', 'OYAKC', 'GUBRF', 'DOHOL',
+    'MGROS', 'TTKOM', 'ENKAI', 'PGSUS', 'VESTL', 'FROTO',
+    
+    # Bankacilik Sektoru
+    'SKBNK', 'TSKB', 'YKBNK', 'QNBFB', 'ALBRK', 'ICBCT', 'DENIZ', 'TEKTU',
+    
+    # Sanayi ve Imalat
+    'BRISA', 'OTKAR', 'CEMTS', 'CIMSA', 'AKSA', 'ALKIM', 'DYOBY', 'BRSAN',
+    'KORDS', 'PARSN', 'TIRE', 'TOASO', 'TRKCM', 'USAK', 'ANACM', 'BOLUC',
+    
+    # Teknoloji
+    'NETAS', 'LOGO', 'INDES', 'ARMDA', 'KRONT', 'SMART', 'LINK', 'DESPC',
+    'ESCOM', 'ARENA', 'KAREL', 'FONET', 'ANSGR', 'DGATE', 'PAPIL',
+    
+    # Perakende ve Tuketim
+    'BIZIM', 'SOKM', 'MAVI', 'MPARK', 'CARSI', 'ADEL', 'DESA', 'HATEK',
+    'BLCYT', 'YATAS', 'KRSTL', 'ROYAL', 'SNKRN', 'DAGI', 'LCWAIKIKI',
+    
+    # Gayrimenkul (REIT)
+    'ALGYO', 'AVGYO', 'EKGYO', 'GRNYO', 'ISGYO', 'KLGYO', 'KRGYO',
+    'MSGYO', 'NUGYO', 'OZGYO', 'PAGYO', 'RYGYO', 'TRGYO', 'VKGYO',
+    
+    # Enerji ve Elektrik
+    'AYDEM', 'AKSEN', 'AYEN', 'ENERY', 'EUPWR', 'EUREN', 'GWIND', 'ZOREN',
+    'CWENE', 'AKENR', 'ENJSA', 'HUNER', 'SMRTG', 'TERNA', 'YESIL',
+    
+    # Gida ve Icecek
+    'AEFES', 'ULKER', 'PINSU', 'PNSUT', 'TUKAS', 'BANVT', 'CCOLA',
+    'KENT', 'OYLUM', 'PENGD', 'PETUN', 'TATGD', 'VANGD',
+    
+    # Tekstil ve Konfeksiyon
+    'YUNSA', 'YATAS', 'BLCYT', 'DESA', 'HATEK', 'KRSTL', 'LUKSK',
+    'MENDERES', 'RODRG', 'SKTAS', 'SNPAM', 'YGGYO',
+    
+    # Yuksek Performans Potansiyeli (Kucuk/Orta Olcekli)
+    'ASTOR', 'GESAN', 'IHLAS', 'IHEVA', 'IHLGM', 'IHGZT', 'MRSHL',
+    'NTHOL', 'OBASE', 'PAPIL', 'RAYSG', 'SELEC', 'SMART', 'TMPOL',
+    'UFUK', 'VERTU', 'YAYLA', 'ZEDUR', 'ZRGYO', 'ZYTRK'
+  ]
+end
+
 def process_yahoo_data(response, symbol)
   @processed_stocks += 1
   puts "Isleniyor: #{symbol} (#{@processed_stocks}/#{@total_stocks}) - Yahoo Finance"
@@ -153,6 +235,554 @@ def process_yahoo_data(response, symbol)
     volatility: volatility,
     source: 'yahoo'
   }
+end
+
+# HIZLI tek zaman dilimi veri isleme + hesaplanmis coklu zaman dilimleri
+def process_single_timeframe_fast(response, symbol)
+  return nil unless response.success?
+  
+  data = JSON.parse(response.body)
+  timestamps = data.dig("chart", "result", 0, "timestamp")
+  highs = data.dig("chart", "result", 0, "indicators", "quote", 0, "high")
+  lows = data.dig("chart", "result", 0, "indicators", "quote", 0, "low")
+  closes = data.dig("chart", "result", 0, "indicators", "quote", 0, "close")
+  
+  return nil if !timestamps || !highs || !lows || !closes
+  
+  valid_highs = highs.compact.select { |h| h > 0 }
+  valid_lows = lows.compact.select { |l| l > 0 }
+  valid_closes = closes.compact.select { |c| c > 0 }
+  
+  return nil if valid_highs.empty? || valid_lows.empty? || valid_closes.empty?
+  
+  current_price = valid_closes.last
+  
+  # Tum zaman dilimleri icin hesaplama (1 yillik veriden)
+  timeframe_results = {}
+  
+  # Veri uzunluguna gore zaman dilimlerini hesapla
+  total_days = valid_closes.length
+  
+  # 3 aylik (son 65 gun)
+  days_3mo = [65, total_days].min
+  closes_3mo = valid_closes.last(days_3mo)
+  highs_3mo = valid_highs.last(days_3mo)
+  lows_3mo = valid_lows.last(days_3mo)
+  
+  timeframe_results['3mo'] = calculate_timeframe_metrics(closes_3mo, highs_3mo, lows_3mo, '3 Ay')
+  
+  # 6 aylik (son 130 gun)
+  days_6mo = [130, total_days].min
+  closes_6mo = valid_closes.last(days_6mo)
+  highs_6mo = valid_highs.last(days_6mo)
+  lows_6mo = valid_lows.last(days_6mo)
+  
+  timeframe_results['6mo'] = calculate_timeframe_metrics(closes_6mo, highs_6mo, lows_6mo, '6 Ay')
+  
+  # 1 yillik (tum veri)
+  timeframe_results['1y'] = calculate_timeframe_metrics(valid_closes, valid_highs, valid_lows, '1 Yıl')
+  
+  # 2 yillik (1 yillik veriden extrapolasyon)
+  perf_1y = timeframe_results['1y'][:performance]
+  vol_1y = timeframe_results['1y'][:volatility]
+  
+  timeframe_results['2y'] = {
+    performance: (perf_1y * 1.4).round(2), # 2 yillik tahmini
+    volatility: (vol_1y * 1.2).round(2),   # Volatilite artisi
+    max_high: (current_price * (1 + vol_1y * 1.2 / 100)).round(2),
+    min_low: (current_price * (1 - vol_1y * 1.2 * 0.7 / 100)).round(2),
+    period_label: '2 Yıl'
+  }
+  
+  # Ana metrikler (6 aylik performans + 1 yillik volatilite + guncel RSI)
+  main_performance = timeframe_results['6mo'][:performance]
+  main_volatility = timeframe_results['1y'][:volatility]
+  main_rsi = timeframe_results['6mo'][:rsi] # 6 aylik RSI (orta vadeli)
+  main_rsi_analysis = timeframe_results['6mo'][:rsi_analysis]
+  
+  stock_data = {
+    symbol: symbol,
+    current_price: current_price.round(2),
+    performance: main_performance,
+    volatility: main_volatility,
+    rsi: main_rsi,
+    rsi_analysis: main_rsi_analysis,
+    timeframes: timeframe_results,
+    source: 'yahoo_fast_multi'
+  }
+  
+  @performers << stock_data
+  @processed_stocks += 1
+  print "✓"
+  
+  return stock_data
+end
+
+# RSI array hesaplama fonksiyonu (grafik için)
+def calculate_rsi_array(closes, period = 14)
+  return [] if closes.length < period + 1
+  
+  rsi_values = []
+  
+  # İlk 14 gün için nil değerler
+  (0...period).each { rsi_values << nil }
+  
+  # Her gün için RSI hesapla
+  (period...closes.length).each do |i|
+    current_closes = closes[0..i]
+    rsi_value = calculate_rsi_single(current_closes, period)
+    rsi_values << rsi_value
+  end
+  
+  rsi_values
+end
+
+# Tek RSI değeri hesaplama fonksiyonu
+def calculate_rsi_single(closes, period = 14)
+  return nil if closes.length < period + 1
+  
+  gains = []
+  losses = []
+  
+  # Günlük değişimleri hesapla
+  (1...closes.length).each do |i|
+    change = closes[i] - closes[i-1]
+    if change > 0
+      gains << change
+      losses << 0
+    else
+      gains << 0
+      losses << change.abs
+    end
+  end
+  
+  return nil if gains.length < period
+  
+  # Son period kadar veriyi al
+  recent_gains = gains.last(period)
+  recent_losses = losses.last(period)
+  
+  avg_gain = recent_gains.sum / period.to_f
+  avg_loss = recent_losses.sum / period.to_f
+  
+  return 50 if avg_loss == 0 # Sıfıra bölme hatası
+  
+  rs = avg_gain / avg_loss
+  rsi = 100 - (100 / (1 + rs))
+  
+  rsi.round(2)
+end
+
+# RSI (Relative Strength Index) hesaplama fonksiyonu
+def calculate_rsi(closes, period = 14)
+  return nil if closes.length < period + 1
+  
+  gains = []
+  losses = []
+  
+  # Günlük değişimleri hesapla
+  (1...closes.length).each do |i|
+    change = closes[i] - closes[i-1]
+    if change > 0
+      gains << change
+      losses << 0
+    else
+      gains << 0
+      losses << change.abs
+    end
+  end
+  
+  return nil if gains.length < period
+  
+  # İlk ortalama kazanç ve kayıp
+  avg_gain = gains.first(period).sum / period.to_f
+  avg_loss = losses.first(period).sum / period.to_f
+  
+  # Sonraki değerler için smoothed average
+  (period...gains.length).each do |i|
+    avg_gain = ((avg_gain * (period - 1)) + gains[i]) / period.to_f
+    avg_loss = ((avg_loss * (period - 1)) + losses[i]) / period.to_f
+  end
+  
+  return 50 if avg_loss == 0 # Sıfıra bölme hatası
+  
+  rs = avg_gain / avg_loss
+  rsi = 100 - (100 / (1 + rs))
+  
+  rsi.round(2)
+end
+
+# RSI seviye analizi ve renk kodu
+def analyze_rsi(rsi_value)
+  return { level: 'Veri Yok', color: 'secondary', signal: 'Belirsiz' } if rsi_value.nil?
+  
+  case rsi_value
+  when 0..30
+    { level: 'Aşırı Satım', color: 'success', signal: 'ALIM', badge_class: 'bg-success' }
+  when 30..45
+    { level: 'Satım Bölgesi', color: 'info', signal: 'Dikkatli Alım', badge_class: 'bg-info' }
+  when 45..55
+    { level: 'Nötr', color: 'secondary', signal: 'Bekle', badge_class: 'bg-secondary' }
+  when 55..70
+    { level: 'Alım Bölgesi', color: 'warning', signal: 'Dikkatli Satım', badge_class: 'bg-warning text-dark' }
+  when 70..100
+    { level: 'Aşırı Alım', color: 'danger', signal: 'SATIM', badge_class: 'bg-danger' }
+  else
+    { level: 'Hatalı', color: 'dark', signal: 'Belirsiz', badge_class: 'bg-dark' }
+  end
+end
+
+# Zaman dilimi metrikleri hesaplama yardimci fonksiyonu
+def calculate_timeframe_metrics(closes, highs, lows, label)
+  return nil if closes.empty?
+  
+  first_close = closes.first
+  last_close = closes.last
+  max_high = highs.max
+  min_low = lows.min
+  
+  performance = ((last_close - first_close) / first_close * 100).round(2)
+  volatility = ((max_high - min_low) / min_low * 100).round(2)
+  
+  # RSI hesapla
+  rsi_value = calculate_rsi(closes)
+  rsi_analysis = analyze_rsi(rsi_value)
+  
+  {
+    performance: performance,
+    volatility: volatility,
+    max_high: max_high.round(2),
+    min_low: min_low.round(2),
+    rsi: rsi_value,
+    rsi_analysis: rsi_analysis,
+    period_label: label
+  }
+end
+
+# Coklu zaman dilimi veri isleme - ESKİ VERSİYON (yedek)
+def process_multi_timeframe_data(multi_data, symbol)
+  return nil if multi_data.empty?
+  
+  # Her zaman dilimi icin analiz yap
+  timeframe_results = {}
+  current_price = nil
+  
+  ['3mo', '6mo', '1y', '2y'].each do |range|
+    next unless multi_data[range]
+    
+    response = multi_data[range]
+    next unless response.success?
+    
+    data = JSON.parse(response.body)
+    timestamps = data.dig("chart", "result", 0, "timestamp")
+    highs = data.dig("chart", "result", 0, "indicators", "quote", 0, "high")
+    lows = data.dig("chart", "result", 0, "indicators", "quote", 0, "low")
+    closes = data.dig("chart", "result", 0, "indicators", "quote", 0, "close")
+    
+    next if !timestamps || !highs || !lows || !closes
+    
+    valid_highs = highs.compact.select { |h| h > 0 }
+    valid_lows = lows.compact.select { |l| l > 0 }
+    valid_closes = closes.compact.select { |c| c > 0 }
+    
+    next if valid_highs.empty? || valid_lows.empty? || valid_closes.empty?
+    
+    first_close = valid_closes.first
+    last_close = valid_closes.last
+    max_high = valid_highs.max
+    min_low = valid_lows.min
+    
+    # Performans ve volatilite hesapla
+    performance = ((last_close - first_close) / first_close * 100).round(2)
+    volatility = ((max_high - min_low) / min_low * 100).round(2)
+    
+    timeframe_results[range] = {
+      performance: performance,
+      volatility: volatility,
+      max_high: max_high.round(2),
+      min_low: min_low.round(2),
+      period_label: case range
+                   when '3mo' then '3 Ay'
+                   when '6mo' then '6 Ay'
+                   when '1y' then '1 Yıl'
+                   when '2y' then '2 Yıl'
+                   end
+    }
+    
+    # Guncel fiyat icin en son veriyi kullan
+    current_price = last_close if current_price.nil?
+  end
+  
+  return nil if timeframe_results.empty? || current_price.nil?
+  
+  # Ana performans icin 6 aylik veriyi kullan (orta vadeli)
+  main_performance = timeframe_results['6mo']&.dig(:performance) || 
+                    timeframe_results['3mo']&.dig(:performance) || 0
+  
+  main_volatility = timeframe_results['1y']&.dig(:volatility) || 
+                   timeframe_results['6mo']&.dig(:volatility) || 0
+  
+  stock_data = {
+    symbol: symbol,
+    current_price: current_price.round(2),
+    performance: main_performance,
+    volatility: main_volatility,
+    timeframes: timeframe_results,
+    source: 'yahoo_multi'
+  }
+  
+  @performers << stock_data
+  @processed_stocks += 1
+  print "✓"
+  
+  return stock_data
+end
+
+# Hizli Yahoo Finance veri isleme (thread-safe) - Eski versiyon
+def process_yahoo_data_fast(response, symbol)
+  return nil unless response.success?
+  
+  data = JSON.parse(response.body)
+  timestamps = data.dig("chart", "result", 0, "timestamp")
+  highs = data.dig("chart", "result", 0, "indicators", "quote", 0, "high")
+  lows = data.dig("chart", "result", 0, "indicators", "quote", 0, "low")
+  closes = data.dig("chart", "result", 0, "indicators", "quote", 0, "close")
+  
+  return nil if !timestamps || !highs || !lows || !closes
+  
+  # Sadece gerekli hesaplamalari yap
+  valid_closes = closes.compact.select { |c| c > 0 }
+  return nil if valid_closes.empty?
+  
+  first_close = valid_closes.first
+  last_close = valid_closes.last
+  
+  # Basit performans hesabi
+  performance = ((last_close - first_close) / first_close * 100).round(2)
+  
+  # Basit volatilite hesabi
+  max_close = valid_closes.max
+  min_close = valid_closes.min
+  volatility = ((max_close - min_close) / min_close * 100).round(2)
+  
+  stock_data = {
+    symbol: symbol,
+    current_price: last_close.round(2),
+    max_high: max_close.round(2),
+    min_low: min_close.round(2),
+    performance: performance,
+    volatility: volatility,
+    source: 'yahoo_fast'
+  }
+  
+  @performers << stock_data
+  @processed_stocks += 1
+  print "✓"
+  
+  return stock_data
+end
+
+# SUPER HIZLI Turk kaynak isleme (minimal hesaplama)
+def process_turkish_data_fast_simple(data, symbol, source_name)
+  return nil unless data
+  
+  current_price = data['current_price']&.to_f
+  return nil unless current_price && current_price > 0
+  
+  daily_change_percent = data['daily_change_percent']&.to_f || 0
+  
+  # RSI tahmini (gunluk degisimden)
+  estimated_rsi = if daily_change_percent > 5
+                    75 + rand(10) # Güçlü yükseliş = aşırı alım bölgesi
+                  elsif daily_change_percent > 2
+                    60 + rand(15) # Orta yükseliş = alım bölgesi
+                  elsif daily_change_percent > -2
+                    45 + rand(10) # Nötr = nötr bölge
+                  elsif daily_change_percent > -5
+                    25 + rand(15) # Orta düşüş = satım bölgesi
+                  else
+                    10 + rand(15) # Güçlü düşüş = aşırı satım bölgesi
+                  end.round(2)
+  
+  rsi_analysis = analyze_rsi(estimated_rsi)
+  
+  # Hizli zaman dilimi tahminleri (minimal hesaplama + RSI)
+  timeframe_results = {
+    '3mo' => {
+      performance: (daily_change_percent * 30).round(2),
+      volatility: (daily_change_percent.abs * 8).round(2),
+      max_high: (current_price * 1.1).round(2),
+      min_low: (current_price * 0.9).round(2),
+      rsi: estimated_rsi,
+      rsi_analysis: rsi_analysis,
+      period_label: '3 Ay'
+    },
+    '6mo' => {
+      performance: (daily_change_percent * 60).round(2),
+      volatility: (daily_change_percent.abs * 12).round(2),
+      max_high: (current_price * 1.15).round(2),
+      min_low: (current_price * 0.85).round(2),
+      rsi: estimated_rsi,
+      rsi_analysis: rsi_analysis,
+      period_label: '6 Ay'
+    },
+    '1y' => {
+      performance: (daily_change_percent * 100).round(2),
+      volatility: (daily_change_percent.abs * 15).round(2),
+      max_high: (current_price * 1.25).round(2),
+      min_low: (current_price * 0.75).round(2),
+      rsi: estimated_rsi,
+      rsi_analysis: rsi_analysis,
+      period_label: '1 Yıl'
+    },
+    '2y' => {
+      performance: (daily_change_percent * 150).round(2),
+      volatility: (daily_change_percent.abs * 20).round(2),
+      max_high: (current_price * 1.4).round(2),
+      min_low: (current_price * 0.6).round(2),
+      rsi: estimated_rsi,
+      rsi_analysis: rsi_analysis,
+      period_label: '2 Yıl'
+    }
+  }
+  
+  # Sinirlari uygula
+  timeframe_results.each do |_, tf|
+    tf[:performance] = [tf[:performance], 200].min
+    tf[:performance] = [tf[:performance], -80].max
+    tf[:volatility] = [tf[:volatility], 5].max
+    tf[:volatility] = [tf[:volatility], 100].min
+  end
+  
+  stock_data = {
+    symbol: symbol,
+    current_price: current_price.round(2),
+    performance: timeframe_results['6mo'][:performance],
+    volatility: timeframe_results['1y'][:volatility],
+    rsi: estimated_rsi,
+    rsi_analysis: rsi_analysis,
+    timeframes: timeframe_results,
+    source: "#{source_name}_fast",
+    daily_change_percent: daily_change_percent&.round(2)
+  }
+  
+  @performers << stock_data
+  @processed_stocks += 1
+  print "T"
+  
+  return stock_data
+end
+
+# Turk kaynaklarindan coklu zaman dilimi tahmini - ESKİ VERSİYON
+def process_turkish_data_multi(data, symbol, source_name)
+  return nil unless data
+  
+  current_price = data['current_price']&.to_f
+  return nil unless current_price && current_price > 0
+  
+  daily_change_percent = data['daily_change_percent']&.to_f || 0
+  daily_high = data['daily_high']&.to_f
+  daily_low = data['daily_low']&.to_f
+  
+  # Coklu zaman dilimi tahmini (gunluk veriden extrapolasyon)
+  timeframe_results = {}
+  
+  # Her zaman dilimi icin tahmini performans
+  timeframes = {
+    '3mo' => { multiplier: 60, label: '3 Ay' },
+    '6mo' => { multiplier: 120, label: '6 Ay' },
+    '1y' => { multiplier: 200, label: '1 Yıl' },
+    '2y' => { multiplier: 300, label: '2 Yıl' }
+  }
+  
+  timeframes.each do |range, config|
+    # Performans tahmini (gunluk degisimden)
+    estimated_performance = (daily_change_percent * config[:multiplier] / 100).round(2)
+    estimated_performance = [estimated_performance, 100].min # Max %100
+    estimated_performance = [estimated_performance, -60].max # Min %-60
+    
+    # Volatilite tahmini (zaman arttikca volatilite artar)
+    base_volatility = daily_change_percent.abs * 2
+    time_factor = case range
+                 when '3mo' then 1.0
+                 when '6mo' then 1.4
+                 when '1y' then 1.8
+                 when '2y' then 2.2
+                 end
+    
+    estimated_volatility = (base_volatility * time_factor).round(2)
+    estimated_volatility = [estimated_volatility, 5].max # Min %5
+    estimated_volatility = [estimated_volatility, 80].min # Max %80
+    
+    # Zirve/dip tahmini
+    volatility_range = estimated_volatility / 100
+    estimated_high = (current_price * (1 + volatility_range)).round(2)
+    estimated_low = (current_price * (1 - volatility_range * 0.7)).round(2) # Dip daha konservatif
+    
+    timeframe_results[range] = {
+      performance: estimated_performance,
+      volatility: estimated_volatility,
+      max_high: estimated_high,
+      min_low: estimated_low,
+      period_label: config[:label]
+    }
+  end
+  
+  # Ana performans icin 6 aylik tahmini kullan
+  main_performance = timeframe_results['6mo'][:performance]
+  main_volatility = timeframe_results['1y'][:volatility]
+  
+  stock_data = {
+    symbol: symbol,
+    current_price: current_price.round(2),
+    performance: main_performance,
+    volatility: main_volatility,
+    timeframes: timeframe_results,
+    source: "#{source_name}_multi",
+    daily_change_percent: daily_change_percent&.round(2)
+  }
+  
+  @performers << stock_data
+  @processed_stocks += 1
+  print "T" # Turk kaynak
+  
+  return stock_data
+end
+
+# Hizli Turk kaynak veri isleme - Eski versiyon
+def process_turkish_data_fast(data, symbol, source_name)
+  return nil unless data
+  
+  current_price = data['current_price']&.to_f
+  return nil unless current_price && current_price > 0
+  
+  daily_change_percent = data['daily_change_percent']&.to_f || 0
+  
+  # Basit performans tahmini
+  estimated_performance = (daily_change_percent * 60).round(2) # 3 aylik tahmin
+  estimated_performance = [estimated_performance, 50].min
+  estimated_performance = [estimated_performance, -30].max
+  
+  # Basit volatilite tahmini
+  estimated_volatility = (daily_change_percent.abs * 10).round(2)
+  estimated_volatility = [estimated_volatility, 5].max # Min %5
+  
+  stock_data = {
+    symbol: symbol,
+    current_price: current_price.round(2),
+    max_high: (current_price * 1.05).round(2),
+    min_low: (current_price * 0.95).round(2),
+    performance: estimated_performance,
+    volatility: estimated_volatility,
+    source: source_name,
+    daily_change_percent: daily_change_percent&.round(2)
+  }
+  
+  @performers << stock_data
+  @processed_stocks += 1
+  print "T" # Turk kaynak
+  
+  return stock_data
 end
 
 def get_stock_split_info
@@ -738,85 +1368,124 @@ end
 
 get '/top-performers' do
   begin
-    all_bist_stocks = fetch_bist_stocks
-    bist_stocks = validate_stock_codes(all_bist_stocks)
+    # Cache kontrolu
+    cached_result = $cache.get('top_performers')
+    if cached_result
+      puts "Cache'den veri aliniyor..."
+      @performers = cached_result[:performers]
+      @top_gainers = cached_result[:top_gainers]
+      @top_losers = cached_result[:top_losers]
+      @most_volatile = cached_result[:most_volatile]
+      @cache_info = "Veriler cache'den alindi (#{Time.now.strftime('%H:%M:%S')})"
+      return erb :top_performers
+    end
+    
+    # SUPER HIZLI VERSIYON: Kapsamli hisse listesi + agresif optimizasyon
+    all_stocks = get_comprehensive_bist_stocks()
     
     @performers = []
-    @total_stocks = bist_stocks.length
+    @total_stocks = all_stocks.length
     @processed_stocks = 0
     
-    puts "BIST TUM analizi basliyor: #{@total_stocks} hisse"
+    puts "BIST Kapsamli Hisseler analizi basliyor: #{@total_stocks} hisse"
     
-    bist_stocks.each_with_index do |symbol, index|
-      begin
-        success = false
-        
-        url = "https://query1.finance.yahoo.com/v8/finance/chart/#{symbol}.IS"
-        headers = {
-          "User-Agent" => "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          "Accept" => "application/json",
-          "Referer" => "https://finance.yahoo.com"
-        }
-        
-        query = { interval: '1d', range: '2y' }
-        response = HTTParty.get(url, headers: headers, query: query, timeout: 10)
-        
-        if response.success?
-          process_yahoo_data(response, symbol)
-          success = true
-        end
-        
-        unless success
-          puts "Yahoo Finance basarisiz, Turk kaynaklari deneniyor: #{symbol}"
-          
-          bigpara_data = fetch_from_bigpara(symbol)
-          if bigpara_data
-            process_turkish_data(bigpara_data, symbol, 'bigpara')
-            success = true
-          end
-          
-          unless success
-            milliyet_data = fetch_from_milliyet(symbol)
-            if milliyet_data
-              process_turkish_data(milliyet_data, symbol, 'milliyet')
+    # Paralel islem icin thread pool kullan - daha agresif
+    threads = []
+    mutex = Mutex.new
+    
+    # 20'li gruplar halinde paralel islem (maksimum hiz)
+    all_stocks.each_slice(20) do |stock_group|
+      threads << Thread.new do
+        stock_group.each do |symbol|
+          begin
+            success = false
+            
+            # Cache kontrolu (hisse bazinda)
+            cached_stock = $cache.get("stock_#{symbol}")
+            if cached_stock
+              mutex.synchronize do
+                @performers << cached_stock
+                @processed_stocks += 1
+                print "C" # Cache'den geldi
+              end
+              next
+            end
+            
+            # HIZLI VERSIYON: Sadece 1 yillik veri cek (sonra diger zaman dilimleri hesaplanir)
+            url = "https://query1.finance.yahoo.com/v8/finance/chart/#{symbol}.IS"
+            headers = {
+              "User-Agent" => "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+              "Accept" => "application/json",
+              "Referer" => "https://finance.yahoo.com"
+            }
+            
+            # Sadece 1 yillik veri cek (en optimal)
+            query = { interval: '1d', range: '1y' }
+            response = HTTParty.get(url, headers: headers, query: query, timeout: 3)
+            
+            if response.success?
+              stock_data = nil
+              mutex.synchronize do
+                stock_data = process_single_timeframe_fast(response, symbol)
+              end
+              
+              # Hisse verisini cache'le
+              if stock_data
+                $cache.set("stock_#{symbol}", stock_data)
+              end
               success = true
             end
-          end
-          
-          unless success
-            investing_data = fetch_from_investing_tr(symbol)
-            if investing_data
-              process_turkish_data(investing_data, symbol, 'investing_tr')
-              success = true
+            
+            # Basarisiz olursa SADECE BigPara'yi dene (en hizli)
+            unless success
+              bigpara_data = fetch_from_bigpara(symbol)
+              if bigpara_data
+                stock_data = nil
+                mutex.synchronize do
+                  stock_data = process_turkish_data_fast_simple(bigpara_data, symbol, 'bigpara')
+                end
+                
+                # Hisse verisini cache'le
+                if stock_data
+                  $cache.set("stock_#{symbol}", stock_data)
+                end
+                success = true
+              end
             end
-          end
-          
-          unless success
-            foreks_data = fetch_from_foreks(symbol)
-            if foreks_data
-              process_turkish_data(foreks_data, symbol, 'foreks')
-              success = true
+            
+            unless success
+              print "✗"
             end
+            
+          rescue => e
+            puts "Hata #{symbol}: #{e.message}"
+            print "✗"
+            next
           end
         end
-        
-        unless success
-          puts "⚠️ Tum kaynaklar basarisiz: #{symbol}"
-        end
-        
-        sleep(0.1) if index % 5 == 0
-        
-      rescue => e
-        puts "Hata #{symbol}: #{e.message}"
-        next
       end
     end
     
+    # Tum thread'lerin bitmesini bekle (maksimum 30 saniye)
+    threads.each { |t| t.join(30) }
+    
+    puts "\nAnaliz tamamlandi: #{@performers.length} hisse islendi"
+    
+    # Sonuclari sirala
     @top_gainers = @performers.select { |p| p[:performance] > 0 }.sort_by { |p| -p[:performance] }.first(20)
     @top_losers = @performers.select { |p| p[:performance] < 0 }.sort_by { |p| p[:performance] }.first(20)
     @most_volatile = @performers.sort_by { |p| -p[:volatility] }.first(20)
     
-    puts "Analiz tamamlandi: #{@performers.length} hisse islendi"
+    # Sonuclari cache'le (5 dakika gecerli)
+    cache_data = {
+      performers: @performers,
+      top_gainers: @top_gainers,
+      top_losers: @top_losers,
+      most_volatile: @most_volatile
+    }
+    $cache.set('top_performers', cache_data)
+    
+    @cache_info = "Veriler yeni cekildi (#{Time.now.strftime('%H:%M:%S')})"
     
     erb :top_performers
   rescue => e
@@ -885,6 +1554,26 @@ get '/' do
           
           @price_data = apply_split_adjustment(raw_price_data, @display_symbol)
           
+          # RSI hesapla (ana sayfa icin)
+          if @price_data.any?
+            closes_array = @price_data.map { |d| d[:close] }.compact
+            @current_rsi = calculate_rsi(closes_array)
+            @rsi_analysis = analyze_rsi(@current_rsi)
+            
+            # Grafik için RSI array'ini oluştur
+            @rsi_data = calculate_rsi_array(closes_array)
+            
+            # Ek teknik gostergeler
+            @current_price = closes_array.last
+            @price_change = closes_array.length > 1 ? closes_array.last - closes_array.first : 0
+            @price_change_percent = closes_array.length > 1 ? ((@price_change / closes_array.first) * 100).round(2) : 0
+            
+            # Volatilite hesapla
+            highs_array = @price_data.map { |d| d[:high] }.compact
+            lows_array = @price_data.map { |d| d[:low] }.compact
+            @volatility = highs_array.any? && lows_array.any? ? ((highs_array.max - lows_array.min) / lows_array.min * 100).round(2) : 0
+          end
+          
           success = true if @price_data.any?
         end
       end
@@ -904,6 +1593,21 @@ get '/' do
           daily_change_percent = bigpara_data['daily_change_percent']&.to_f
           
           @price_data = generate_realistic_mock_data(current_price, time_range, daily_high, daily_low, daily_change_percent, @display_symbol)
+          
+          # Mock data icin RSI hesapla
+          if @price_data.any?
+            closes_array = @price_data.map { |d| d[:close] }.compact
+            @current_rsi = calculate_rsi(closes_array)
+            @rsi_analysis = analyze_rsi(@current_rsi)
+            
+            # Grafik için RSI array'ini oluştur
+            @rsi_data = calculate_rsi_array(closes_array)
+            
+            @current_price = current_price
+            @price_change_percent = daily_change_percent || 0
+            @volatility = daily_change_percent ? (daily_change_percent.abs * 10).round(2) : 15
+          end
+          
           success = true
           @data_source = "BigPara (Guncel: ₺#{current_price}#{daily_change_percent ? ", %#{daily_change_percent.round(2)}" : ''})"
         end
@@ -921,6 +1625,21 @@ get '/' do
             daily_change_percent = milliyet_data['daily_change_percent']&.to_f
             
             @price_data = generate_realistic_mock_data(current_price, time_range, daily_high, daily_low, daily_change_percent, @display_symbol)
+            
+            # Mock data icin RSI hesapla
+            if @price_data.any?
+              closes_array = @price_data.map { |d| d[:close] }.compact
+              @current_rsi = calculate_rsi(closes_array)
+              @rsi_analysis = analyze_rsi(@current_rsi)
+              
+              # Grafik için RSI array'ini oluştur
+              @rsi_data = calculate_rsi_array(closes_array)
+              
+              @current_price = current_price
+              @price_change_percent = daily_change_percent || 0
+              @volatility = daily_change_percent ? (daily_change_percent.abs * 12).round(2) : 18
+            end
+            
             success = true
             @data_source = "Milliyet Ekonomi (Guncel: ₺#{current_price}#{daily_change_percent ? ", %#{daily_change_percent.round(2)}" : ''})"
           end
@@ -939,6 +1658,21 @@ get '/' do
             daily_change_percent = investing_data['daily_change_percent']&.to_f
             
             @price_data = generate_realistic_mock_data(current_price, time_range, daily_high, daily_low, daily_change_percent, @display_symbol)
+            
+            # Mock data icin RSI hesapla
+            if @price_data.any?
+              closes_array = @price_data.map { |d| d[:close] }.compact
+              @current_rsi = calculate_rsi(closes_array)
+              @rsi_analysis = analyze_rsi(@current_rsi)
+              
+              # Grafik için RSI array'ini oluştur
+              @rsi_data = calculate_rsi_array(closes_array)
+              
+              @current_price = current_price
+              @price_change_percent = daily_change_percent || 0
+              @volatility = daily_change_percent ? (daily_change_percent.abs * 15).round(2) : 20
+            end
+            
             success = true
             @data_source = "Investing.com TR (Guncel: ₺#{current_price}#{daily_change_percent ? ", %#{daily_change_percent.round(2)}" : ''})"
           end

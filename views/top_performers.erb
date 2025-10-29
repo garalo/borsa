@@ -17,21 +17,145 @@
       <% if @performers && @performers.any? %>
         <!-- Analiz Özeti -->
         <div class="alert alert-info mb-4">
-          <h6 class="alert-heading">📊 Analiz Özeti</h6>
+          <h6 class="alert-heading">📊 Hızlı Analiz Özeti</h6>
           <p class="mb-1">
-            <strong><%= @performers.length %></strong> BIST hissesi analiz edildi. 
+            <strong><%= @performers.length %></strong> popüler BIST hissesi analiz edildi (3 aylık veri). 
           </p>
-          <p class="mb-0">
-            <span class="badge bg-success me-2">📊 Investing.com: <%= @performers.count { |p| p[:source] == 'investing.com' } %> hisse (Split-Adjusted)</span>
-            <span class="badge bg-warning">📈 Yahoo Finance: <%= @performers.count { |p| p[:source] == 'yahoo' } %> hisse (Fallback)</span>
+          <p class="mb-1">
+            <span class="badge bg-success me-2">⚡ Yahoo Finance (Çoklu): <%= @performers.count { |p| p[:source] == 'yahoo_fast_multi' } %> hisse</span>
+            <span class="badge bg-info me-2">🇹🇷 Türk Kaynaklar (Tahmini): <%= @performers.count { |p| p[:source].include?('_fast') && !p[:source].include?('yahoo') } %> hisse</span>
+            <span class="badge bg-warning me-2">📊 RSI Analizi: <%= @performers.count { |p| p[:rsi] } %> hisse</span>
           </p>
+          <p class="mb-1">
+            <small class="text-muted">
+              <strong>📊 RSI Renk Kodları:</strong>
+              <span class="badge bg-success me-1">0-30 Aşırı Satım (ALIM)</span>
+              <span class="badge bg-info me-1">30-45 Satım Bölgesi</span>
+              <span class="badge bg-secondary me-1">45-55 Nötr</span>
+              <span class="badge bg-warning text-dark me-1">55-70 Alım Bölgesi</span>
+              <span class="badge bg-danger me-1">70-100 Aşırı Alım (SATIM)</span>
+            </small>
+          </p>
+          <% if @cache_info %>
+            <p class="mb-0">
+              <small class="text-muted">⏱️ <%= @cache_info %> | Cache süresi: 5 dakika</small>
+            </p>
+          <% end %>
         </div>
+        
+        <!-- RSI Büyük Görünüm Stilleri -->
+        <style>
+          .rsi-cell {
+            min-width: 140px !important;
+            text-align: center !important;
+            vertical-align: middle !important;
+            padding: 12px 8px !important;
+          }
+          
+          .rsi-badge {
+            font-size: 1.3rem !important;
+            font-weight: 900 !important;
+            min-width: 75px !important;
+            padding: 10px 15px !important;
+            margin-bottom: 6px !important;
+            border-radius: 8px !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+            letter-spacing: 0.5px !important;
+          }
+          
+          .rsi-signal {
+            font-size: 0.8rem !important;
+            font-weight: 800 !important;
+            color: #2c3e50 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.3px !important;
+            margin-bottom: 2px !important;
+          }
+          
+          .rsi-level {
+            font-size: 0.7rem !important;
+            color: #7f8c8d !important;
+            font-weight: 600 !important;
+            text-transform: capitalize !important;
+          }
+          
+          .rsi-container {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            gap: 3px !important;
+            padding: 4px !important;
+          }
+          
+          /* RSI Seviye Renkleri - Daha Canlı */
+          .bg-success.rsi-badge {
+            background: linear-gradient(135deg, #27ae60, #2ecc71) !important;
+            color: white !important;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
+          }
+          
+          .bg-info.rsi-badge {
+            background: linear-gradient(135deg, #3498db, #5dade2) !important;
+            color: white !important;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
+          }
+          
+          .bg-secondary.rsi-badge {
+            background: linear-gradient(135deg, #95a5a6, #bdc3c7) !important;
+            color: white !important;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
+          }
+          
+          .bg-warning.rsi-badge {
+            background: linear-gradient(135deg, #f39c12, #f1c40f) !important;
+            color: #2c3e50 !important;
+            text-shadow: 0 1px 2px rgba(255,255,255,0.3) !important;
+          }
+          
+          .bg-danger.rsi-badge {
+            background: linear-gradient(135deg, #e74c3c, #c0392b) !important;
+            color: white !important;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
+          }
+          
+          /* Hover efekti */
+          .rsi-badge:hover {
+            transform: scale(1.05) !important;
+            transition: transform 0.2s ease !important;
+          }
+        </style>
+        
+        <!-- Zaman Dilimi Seçici -->
+        <div class="row mb-4">
+          <div class="col-12">
+            <div class="card bg-light">
+              <div class="card-body">
+                <div class="row align-items-center">
+                  <div class="col-md-6">
+                    <h6 class="mb-0">⏱️ Analiz Zaman Dilimi Seçin</h6>
+                    <small class="text-muted">Tablolar seçilen döneme göre güncellenecek</small>
+                  </div>
+                  <div class="col-md-6">
+                    <select id="timeframeSelector" class="form-select">
+                      <option value="3mo">3 Ay (Kısa Vadeli)</option>
+                      <option value="6mo" selected>6 Ay (Orta Vadeli)</option>
+                      <option value="1y">1 Yıl (Uzun Vadeli)</option>
+                      <option value="2y">2 Yıl (Maksimum Analiz)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
         <!-- En Çok Kazandıranlar -->
         <div class="row mb-4">
           <div class="col-12">
             <div class="card">
-              <div class="card-header bg-success text-white">
+              <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">🚀 En Çok Kazandıranlar (Top 20)</h5>
+                <span id="gainersTimeframe" class="badge bg-light text-dark">6 Ay</span>
               </div>
               <div class="card-body p-0">
                 <div class="table-responsive">
@@ -41,30 +165,73 @@
                         <th>Sıra</th>
                         <th>Hisse</th>
                         <th>Güncel Fiyat</th>
-                        <th>2 Yıl Zirve</th>
-                        <th>2 Yıl Dip</th>
-                        <th>Performans</th>
+                        <th>Performans <span id="gainersPerformanceLabel">(6 Ay)</span></th>
+                        <th>RSI <span id="gainersRsiLabel">(14)</span></th>
                         <th>Volatilite</th>
-                        <th>Analiz</th>
+                        <th>Zirve <span id="gainersHighLabel">(Dönem)</span></th>
+                        <th>Dip <span id="gainersLowLabel">(Dönem)</span></th>
+                        <th>Detay</th>
+                        <th>Grafik</th>
                       </tr>
                     </thead>
-                    <tbody>
-                      <% @top_gainers.each_with_index do |stock, index| %>
-                        <tr>
+                    <tbody id="gainersTableBody">
+                      <% @performers.select { |p| p[:performance] > 0 }.sort_by { |p| -p[:performance] }.first(20).each_with_index do |stock, index| %>
+                        <tr data-stock='<%= stock.to_json %>'>
                           <td><span class="badge bg-success"><%= index + 1 %></span></td>
-                          <td><strong><%= stock[:symbol] %></strong></td>
-                          <td><%= stock[:current_price] %> TL</td>
-                          <td class="text-danger"><%= stock[:max_high] %> TL</td>
-                          <td class="text-success"><%= stock[:min_low] %> TL</td>
                           <td>
+                            <strong><%= stock[:symbol] %></strong>
+                            <% if stock[:timeframes] %>
+                              <br><small class="text-muted">Çoklu Analiz</small>
+                            <% end %>
+                          </td>
+                          <td><%= stock[:current_price] %> TL</td>
+                          <td class="performance-cell">
                             <span class="badge bg-success fs-6">
                               +<%= stock[:performance] %>%
                             </span>
                           </td>
-                          <td><%= stock[:volatility] %>%</td>
+                          <td class="rsi-cell">
+                            <% if stock[:rsi] && stock[:rsi_analysis] %>
+                              <span class="badge <%= stock[:rsi_analysis][:badge_class] %> fs-6" 
+                                    title="<%= stock[:rsi_analysis][:level] %> - <%= stock[:rsi_analysis][:signal] %>">
+                                <%= stock[:rsi] %>
+                              </span>
+                              <br><small class="text-muted"><%= stock[:rsi_analysis][:signal] %></small>
+                            <% else %>
+                              <span class="text-muted">-</span>
+                            <% end %>
+                          </td>
+                          <td class="volatility-cell">
+                            <%= stock[:volatility] %>%
+                          </td>
+                          <td class="high-cell text-danger">
+                            <% if stock[:timeframes] && stock[:timeframes]['6mo'] %>
+                              <%= stock[:timeframes]['6mo'][:max_high] %> TL
+                            <% else %>
+                              <%= (stock[:current_price] * 1.1).round(2) %> TL
+                            <% end %>
+                          </td>
+                          <td class="low-cell text-success">
+                            <% if stock[:timeframes] && stock[:timeframes]['6mo'] %>
+                              <%= stock[:timeframes]['6mo'][:min_low] %> TL
+                            <% else %>
+                              <%= (stock[:current_price] * 0.9).round(2) %> TL
+                            <% end %>
+                          </td>
                           <td>
-                            <a href="/?:symbol=<%= stock[:symbol] %>&range=2y" 
-                               class="btn btn-sm btn-outline-primary">
+                            <% if stock[:timeframes] %>
+                              <button class="btn btn-sm btn-info" 
+                                      data-bs-toggle="modal" 
+                                      data-bs-target="#detailModal<%= stock[:symbol] %>">
+                                Detay
+                              </button>
+                            <% else %>
+                              <span class="text-muted">Basit</span>
+                            <% end %>
+                          </td>
+                          <td>
+                            <a href="/?:symbol=<%= stock[:symbol] %>&range=6mo" 
+                               class="btn btn-sm btn-outline-primary graph-link">
                               Grafik
                             </a>
                           </td>
@@ -82,8 +249,9 @@
         <div class="row mb-4">
           <div class="col-12">
             <div class="card">
-              <div class="card-header bg-danger text-white">
+              <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">📉 En Çok Kaybedenler (Top 20)</h5>
+                <span id="losersTimeframe" class="badge bg-light text-dark">6 Ay</span>
               </div>
               <div class="card-body p-0">
                 <div class="table-responsive">
@@ -93,30 +261,73 @@
                         <th>Sıra</th>
                         <th>Hisse</th>
                         <th>Güncel Fiyat</th>
-                        <th>2 Yıl Zirve</th>
-                        <th>2 Yıl Dip</th>
-                        <th>Performans</th>
+                        <th>Performans <span id="losersPerformanceLabel">(6 Ay)</span></th>
+                        <th>RSI <span id="losersRsiLabel">(14)</span></th>
                         <th>Volatilite</th>
-                        <th>Analiz</th>
+                        <th>Zirve <span id="losersHighLabel">(Dönem)</span></th>
+                        <th>Dip <span id="losersLowLabel">(Dönem)</span></th>
+                        <th>Detay</th>
+                        <th>Grafik</th>
                       </tr>
                     </thead>
-                    <tbody>
-                      <% @top_losers.each_with_index do |stock, index| %>
-                        <tr>
+                    <tbody id="losersTableBody">
+                      <% @performers.select { |p| p[:performance] < 0 }.sort_by { |p| p[:performance] }.first(20).each_with_index do |stock, index| %>
+                        <tr data-stock='<%= stock.to_json %>'>
                           <td><span class="badge bg-danger"><%= index + 1 %></span></td>
-                          <td><strong><%= stock[:symbol] %></strong></td>
-                          <td><%= stock[:current_price] %> TL</td>
-                          <td class="text-danger"><%= stock[:max_high] %> TL</td>
-                          <td class="text-success"><%= stock[:min_low] %> TL</td>
                           <td>
+                            <strong><%= stock[:symbol] %></strong>
+                            <% if stock[:timeframes] %>
+                              <br><small class="text-muted">Çoklu Analiz</small>
+                            <% end %>
+                          </td>
+                          <td><%= stock[:current_price] %> TL</td>
+                          <td class="performance-cell">
                             <span class="badge bg-danger fs-6">
                               <%= stock[:performance] %>%
                             </span>
                           </td>
-                          <td><%= stock[:volatility] %>%</td>
+                          <td class="rsi-cell">
+                            <% if stock[:rsi] && stock[:rsi_analysis] %>
+                              <span class="badge <%= stock[:rsi_analysis][:badge_class] %> fs-6" 
+                                    title="<%= stock[:rsi_analysis][:level] %> - <%= stock[:rsi_analysis][:signal] %>">
+                                <%= stock[:rsi] %>
+                              </span>
+                              <br><small class="text-muted"><%= stock[:rsi_analysis][:signal] %></small>
+                            <% else %>
+                              <span class="text-muted">-</span>
+                            <% end %>
+                          </td>
+                          <td class="volatility-cell">
+                            <%= stock[:volatility] %>%
+                          </td>
+                          <td class="high-cell text-danger">
+                            <% if stock[:timeframes] && stock[:timeframes]['6mo'] %>
+                              <%= stock[:timeframes]['6mo'][:max_high] %> TL
+                            <% else %>
+                              <%= (stock[:current_price] * 1.1).round(2) %> TL
+                            <% end %>
+                          </td>
+                          <td class="low-cell text-success">
+                            <% if stock[:timeframes] && stock[:timeframes]['6mo'] %>
+                              <%= stock[:timeframes]['6mo'][:min_low] %> TL
+                            <% else %>
+                              <%= (stock[:current_price] * 0.9).round(2) %> TL
+                            <% end %>
+                          </td>
                           <td>
-                            <a href="/?:symbol=<%= stock[:symbol] %>&range=2y" 
-                               class="btn btn-sm btn-outline-primary">
+                            <% if stock[:timeframes] %>
+                              <button class="btn btn-sm btn-info" 
+                                      data-bs-toggle="modal" 
+                                      data-bs-target="#detailModal<%= stock[:symbol] %>">
+                                Detay
+                              </button>
+                            <% else %>
+                              <span class="text-muted">Basit</span>
+                            <% end %>
+                          </td>
+                          <td>
+                            <a href="/?:symbol=<%= stock[:symbol] %>&range=6mo" 
+                               class="btn btn-sm btn-outline-primary graph-link">
                               Grafik
                             </a>
                           </td>
@@ -134,8 +345,9 @@
         <div class="row mb-4">
           <div class="col-12">
             <div class="card">
-              <div class="card-header bg-warning text-dark">
+              <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">⚡ En Volatil Hisseler (Top 20)</h5>
+                <span id="volatileTimeframe" class="badge bg-dark text-light">1 Yıl</span>
               </div>
               <div class="card-body p-0">
                 <div class="table-responsive">
@@ -145,34 +357,75 @@
                         <th>Sıra</th>
                         <th>Hisse</th>
                         <th>Güncel Fiyat</th>
-                        <th>2 Yıl Zirve</th>
-                        <th>2 Yıl Dip</th>
-                        <th>Performans</th>
-                        <th>Volatilite</th>
-                        <th>Analiz</th>
+                        <th>Performans <span id="volatilePerformanceLabel">(6 Ay)</span></th>
+                        <th>RSI <span id="volatileRsiLabel">(14)</span></th>
+                        <th>Volatilite <span id="volatileVolatilityLabel">(1 Yıl)</span></th>
+                        <th>Zirve <span id="volatileHighLabel">(Dönem)</span></th>
+                        <th>Dip <span id="volatileLowLabel">(Dönem)</span></th>
+                        <th>Detay</th>
+                        <th>Grafik</th>
                       </tr>
                     </thead>
-                    <tbody>
-                      <% @most_volatile.each_with_index do |stock, index| %>
-                        <tr>
+                    <tbody id="volatileTableBody">
+                      <% @performers.sort_by { |p| -p[:volatility] }.first(20).each_with_index do |stock, index| %>
+                        <tr data-stock='<%= stock.to_json %>'>
                           <td><span class="badge bg-warning text-dark"><%= index + 1 %></span></td>
-                          <td><strong><%= stock[:symbol] %></strong></td>
-                          <td><%= stock[:current_price] %> TL</td>
-                          <td class="text-danger"><%= stock[:max_high] %> TL</td>
-                          <td class="text-success"><%= stock[:min_low] %> TL</td>
                           <td>
+                            <strong><%= stock[:symbol] %></strong>
+                            <% if stock[:timeframes] %>
+                              <br><small class="text-muted">Çoklu Analiz</small>
+                            <% end %>
+                          </td>
+                          <td><%= stock[:current_price] %> TL</td>
+                          <td class="performance-cell">
                             <span class="badge <%= stock[:performance] > 0 ? 'bg-success' : 'bg-danger' %> fs-6">
                               <%= stock[:performance] > 0 ? '+' : '' %><%= stock[:performance] %>%
                             </span>
                           </td>
-                          <td>
+                          <td class="rsi-cell">
+                            <% if stock[:rsi] && stock[:rsi_analysis] %>
+                              <span class="badge <%= stock[:rsi_analysis][:badge_class] %> fs-6" 
+                                    title="<%= stock[:rsi_analysis][:level] %> - <%= stock[:rsi_analysis][:signal] %>">
+                                <%= stock[:rsi] %>
+                              </span>
+                              <br><small class="text-muted"><%= stock[:rsi_analysis][:signal] %></small>
+                            <% else %>
+                              <span class="text-muted">-</span>
+                            <% end %>
+                          </td>
+                          <td class="volatility-cell">
                             <span class="badge bg-warning text-dark fs-6">
                               <%= stock[:volatility] %>%
                             </span>
                           </td>
+                          <td class="high-cell text-danger">
+                            <% if stock[:timeframes] && stock[:timeframes]['1y'] %>
+                              <%= stock[:timeframes]['1y'][:max_high] %> TL
+                            <% else %>
+                              <%= (stock[:current_price] * 1.2).round(2) %> TL
+                            <% end %>
+                          </td>
+                          <td class="low-cell text-success">
+                            <% if stock[:timeframes] && stock[:timeframes]['1y'] %>
+                              <%= stock[:timeframes]['1y'][:min_low] %> TL
+                            <% else %>
+                              <%= (stock[:current_price] * 0.8).round(2) %> TL
+                            <% end %>
+                          </td>
                           <td>
-                            <a href="/?:symbol=<%= stock[:symbol] %>&range=2y" 
-                               class="btn btn-sm btn-outline-primary">
+                            <% if stock[:timeframes] %>
+                              <button class="btn btn-sm btn-info" 
+                                      data-bs-toggle="modal" 
+                                      data-bs-target="#detailModal<%= stock[:symbol] %>">
+                                Detay
+                              </button>
+                            <% else %>
+                              <span class="text-muted">Basit</span>
+                            <% end %>
+                          </td>
+                          <td>
+                            <a href="/?:symbol=<%= stock[:symbol] %>&range=1y" 
+                               class="btn btn-sm btn-outline-primary graph-link">
                               Grafik
                             </a>
                           </td>
@@ -229,3 +482,319 @@
     </div>
   </div>
 </div>
+
+<!-- Çoklu Zaman Dilimi Modal'ları -->
+<% @performers.each do |stock| %>
+  <% if stock[:timeframes] %>
+    <div class="modal fade" id="detailModal<%= stock[:symbol] %>" tabindex="-1">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">📊 <%= stock[:symbol] %> - Çoklu Zaman Dilimi Analizi</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <h6>💰 Güncel Fiyat</h6>
+                <h4 class="text-primary"><%= stock[:current_price] %> TL</h4>
+              </div>
+              <div class="col-md-6">
+                <h6>📈 Kaynak</h6>
+                <span class="badge bg-<%= stock[:source].include?('yahoo') ? 'success' : 'info' %>">
+                  <%= stock[:source].include?('yahoo') ? 'Yahoo Finance' : 'Türk Kaynaklar' %>
+                </span>
+              </div>
+            </div>
+            
+            <h6>⏱️ Zaman Dilimi Analizi</h6>
+            <div class="table-responsive">
+              <table class="table table-striped">
+                <thead>
+                  <tr>
+                    <th>Dönem</th>
+                    <th>Performans</th>
+                    <th>RSI (14)</th>
+                    <th>Volatilite</th>
+                    <th>Tahmini Zirve</th>
+                    <th>Tahmini Dip</th>
+                    <th>Grafik</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% ['3mo', '6mo', '1y', '2y'].each do |period| %>
+                    <% if stock[:timeframes][period] %>
+                      <% tf = stock[:timeframes][period] %>
+                      <tr>
+                        <td><strong><%= tf[:period_label] %></strong></td>
+                        <td>
+                          <span class="badge bg-<%= tf[:performance] > 0 ? 'success' : 'danger' %> fs-6">
+                            <%= tf[:performance] > 0 ? '+' : '' %><%= tf[:performance] %>%
+                          </span>
+                        </td>
+                        <td>
+                          <% if tf[:rsi] && tf[:rsi_analysis] %>
+                            <span class="badge <%= tf[:rsi_analysis][:badge_class] %> fs-6" 
+                                  title="<%= tf[:rsi_analysis][:level] %>">
+                              <%= tf[:rsi] %>
+                            </span>
+                            <br><small class="text-muted"><%= tf[:rsi_analysis][:signal] %></small>
+                          <% else %>
+                            <span class="text-muted">-</span>
+                          <% end %>
+                        </td>
+                        <td>
+                          <span class="badge bg-warning text-dark">
+                            <%= tf[:volatility] %>%
+                          </span>
+                        </td>
+                        <td class="text-danger">
+                          <strong><%= tf[:max_high] %> TL</strong>
+                        </td>
+                        <td class="text-success">
+                          <strong><%= tf[:min_low] %> TL</strong>
+                        </td>
+                        <td>
+                          <a href="/?:symbol=<%= stock[:symbol] %>&range=<%= period %>" 
+                             class="btn btn-sm btn-outline-primary" 
+                             target="_blank">
+                            Grafik
+                          </a>
+                        </td>
+                      </tr>
+                    <% end %>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+            
+            <div class="alert alert-info mt-3">
+              <small>
+                <strong>📝 Not:</strong> 
+                <% if stock[:source].include?('yahoo') %>
+                  Gerçek historical verilerden hesaplanmıştır.
+                <% else %>
+                  Güncel fiyat ve günlük değişimden extrapolasyon ile tahmin edilmiştir.
+                <% end %>
+              </small>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
+            <a href="/?:symbol=<%= stock[:symbol] %>&range=1y" 
+               class="btn btn-primary" target="_blank">
+              Detaylı Grafik Analizi
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  <% end %>
+<% end %>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const timeframeSelector = document.getElementById('timeframeSelector');
+    
+    // Zaman dilimi etiketleri
+    const timeframeLabels = {
+        '3mo': '3 Ay',
+        '6mo': '6 Ay', 
+        '1y': '1 Yıl',
+        '2y': '2 Yıl'
+    };
+    
+    // Tablo güncelleyici fonksiyon
+    function updateTables(selectedTimeframe) {
+        console.log('Updating tables for timeframe:', selectedTimeframe);
+        
+        // Header etiketlerini güncelle
+        updateHeaders(selectedTimeframe);
+        
+        // Her tablo için güncelleme
+        updateTableData('gainersTableBody', selectedTimeframe, 'performance', true);
+        updateTableData('losersTableBody', selectedTimeframe, 'performance', false);
+        updateTableData('volatileTableBody', selectedTimeframe, 'volatility', null);
+        
+        // Grafik linklerini güncelle
+        updateGraphLinks(selectedTimeframe);
+    }
+    
+    // Header etiketlerini güncelle
+    function updateHeaders(timeframe) {
+        const label = timeframeLabels[timeframe];
+        
+        // Timeframe badge'lerini güncelle
+        document.getElementById('gainersTimeframe').textContent = label;
+        document.getElementById('losersTimeframe').textContent = label;
+        document.getElementById('volatileTimeframe').textContent = label;
+        
+        // Tablo header'larını güncelle
+        document.getElementById('gainersPerformanceLabel').textContent = `(${label})`;
+        document.getElementById('losersPerformanceLabel').textContent = `(${label})`;
+        document.getElementById('volatilePerformanceLabel').textContent = `(${label})`;
+        document.getElementById('volatileVolatilityLabel').textContent = `(${label})`;
+        
+        document.getElementById('gainersHighLabel').textContent = `(${label})`;
+        document.getElementById('gainersLowLabel').textContent = `(${label})`;
+        document.getElementById('losersHighLabel').textContent = `(${label})`;
+        document.getElementById('losersLowLabel').textContent = `(${label})`;
+        document.getElementById('volatileHighLabel').textContent = `(${label})`;
+        document.getElementById('volatileLowLabel').textContent = `(${label})`;
+    }
+    
+    // Tablo verilerini güncelle
+    function updateTableData(tableBodyId, timeframe, sortBy, isGainers) {
+        const tableBody = document.getElementById(tableBodyId);
+        const rows = Array.from(tableBody.querySelectorAll('tr'));
+        
+        // Her satır için veriyi güncelle
+        rows.forEach(row => {
+            const stockData = JSON.parse(row.getAttribute('data-stock'));
+            
+            // Seçilen zaman dilimi için veriyi al
+            let performance, volatility, maxHigh, minLow;
+            
+            if (stockData.timeframes && stockData.timeframes[timeframe]) {
+                const tf = stockData.timeframes[timeframe];
+                performance = tf.performance;
+                volatility = tf.volatility;
+                maxHigh = tf.max_high;
+                minLow = tf.min_low;
+            } else {
+                // Fallback: mevcut veriyi kullan veya tahmin et
+                performance = stockData.performance || 0;
+                volatility = stockData.volatility || 10;
+                
+                // Basit tahmin
+                const multiplier = timeframe === '3mo' ? 0.5 : timeframe === '6mo' ? 1 : timeframe === '1y' ? 1.5 : 2;
+                maxHigh = (stockData.current_price * (1 + (volatility * multiplier / 100))).toFixed(2);
+                minLow = (stockData.current_price * (1 - (volatility * multiplier * 0.7 / 100))).toFixed(2);
+            }
+            
+            // Hücreleri güncelle
+            const performanceCell = row.querySelector('.performance-cell .badge');
+            const volatilityCell = row.querySelector('.volatility-cell');
+            const highCell = row.querySelector('.high-cell');
+            const lowCell = row.querySelector('.low-cell');
+            
+            if (performanceCell) {
+                performanceCell.textContent = `${performance > 0 ? '+' : ''}${performance}%`;
+                performanceCell.className = `badge fs-6 ${performance > 0 ? 'bg-success' : 'bg-danger'}`;
+            }
+            
+            if (volatilityCell) {
+                if (tableBodyId === 'volatileTableBody') {
+                    volatilityCell.querySelector('.badge').textContent = `${volatility}%`;
+                } else {
+                    volatilityCell.textContent = `${volatility}%`;
+                }
+            }
+            
+            if (highCell) {
+                highCell.textContent = `${maxHigh} TL`;
+            }
+            
+            if (lowCell) {
+                lowCell.textContent = `${minLow} TL`;
+            }
+            
+            // Sıralama için veriyi sakla
+            row.dataset.sortValue = sortBy === 'performance' ? performance : volatility;
+        });
+        
+        // Tabloyu yeniden sırala
+        sortTable(tableBodyId, sortBy, isGainers);
+    }
+    
+    // Tablo sıralama
+    function sortTable(tableBodyId, sortBy, isGainers) {
+        const tableBody = document.getElementById(tableBodyId);
+        const rows = Array.from(tableBody.querySelectorAll('tr'));
+        
+        rows.sort((a, b) => {
+            const aValue = parseFloat(a.dataset.sortValue);
+            const bValue = parseFloat(b.dataset.sortValue);
+            
+            if (isGainers === true) {
+                return bValue - aValue; // Büyükten küçüğe (kazananlar)
+            } else if (isGainers === false) {
+                return aValue - bValue; // Küçükten büyüğe (kaybedenler)
+            } else {
+                return bValue - aValue; // Büyükten küçüğe (volatil)
+            }
+        });
+        
+        // Sıra numaralarını güncelle ve tabloyu yeniden oluştur
+        rows.forEach((row, index) => {
+            const badge = row.querySelector('.badge');
+            if (badge) {
+                badge.textContent = index + 1;
+            }
+            tableBody.appendChild(row);
+        });
+    }
+    
+    // Grafik linklerini güncelle
+    function updateGraphLinks(timeframe) {
+        document.querySelectorAll('.graph-link').forEach(link => {
+            const href = link.getAttribute('href');
+            const newHref = href.replace(/range=[^&]+/, `range=${timeframe}`);
+            link.setAttribute('href', newHref);
+        });
+    }
+    
+    // Select box değişiklik eventi
+    timeframeSelector.addEventListener('change', function() {
+        const selectedTimeframe = this.value;
+        updateTables(selectedTimeframe);
+    });
+    
+    // RSI hücrelerini büyüt ve güzelleştir
+    function enhanceRSICells() {
+        document.querySelectorAll('.rsi-cell').forEach(cell => {
+            const badge = cell.querySelector('.badge');
+            const signal = cell.querySelector('small');
+            
+            if (badge && signal) {
+                // Yeni yapı oluştur
+                const container = document.createElement('div');
+                container.className = 'rsi-container';
+                
+                // Badge'i güncelle
+                badge.className = badge.className.replace('fs-6', 'rsi-badge');
+                
+                // Signal'i güncelle
+                signal.className = 'rsi-signal';
+                
+                // Level bilgisi ekle
+                const level = document.createElement('div');
+                level.className = 'rsi-level';
+                level.textContent = badge.title.split(' - ')[0];
+                
+                // Yeni yapıyı oluştur
+                container.appendChild(badge);
+                container.appendChild(signal);
+                container.appendChild(level);
+                
+                // Eski içeriği temizle ve yeni yapıyı ekle
+                cell.innerHTML = '';
+                cell.appendChild(container);
+            }
+        });
+    }
+    
+    // Sayfa yüklendiğinde RSI hücrelerini güzelleştir
+    enhanceRSICells();
+    
+    // Sayfa yüklendiğinde varsayılan olarak 6mo seçili
+    updateTables('6mo');
+    
+    // Tablo güncellendiğinde RSI hücrelerini tekrar güzelleştir
+    const originalUpdateTables = updateTables;
+    updateTables = function(selectedTimeframe) {
+        originalUpdateTables(selectedTimeframe);
+        setTimeout(enhanceRSICells, 100); // Kısa gecikme ile
+    };
+});
+</script>

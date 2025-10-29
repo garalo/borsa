@@ -55,6 +55,21 @@
                     <span style="color: #45b7d1;">■</span> MA200
                   </label>
                 </div>
+                <% if @rsi_data && @rsi_data.length > 0 %>
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="rsiToggle" checked>
+                  <label class="form-check-label" for="rsiToggle">
+                    <span style="color: #9b59b6;">■</span> RSI (14)
+                  </label>
+                </div>
+                <div class="ms-2">
+                  <span class="badge <%= @rsi_analysis[:badge_class] %> rsi-current-badge" 
+                        title="<%= @rsi_analysis[:level] %> - <%= @rsi_analysis[:signal] %>">
+                    📊 <%= @current_rsi %>
+                  </span>
+                  <small class="text-muted ms-1"><%= @rsi_analysis[:signal] %></small>
+                </div>
+                <% end %>
               </div>
             </div>
           </div>
@@ -504,6 +519,54 @@
         }
       );
 
+      <% if @rsi_data && @rsi_data.length > 0 %>
+      // RSI seviye çizgileri
+      shapes.push(
+        // RSI 70 (Aşırı Alım)
+        {
+          type: 'line',
+          x0: dates[0],
+          y0: 70,
+          x1: dates[dates.length - 1],
+          y1: 70,
+          yref: 'y2',
+          line: {
+            color: '#e74c3c',
+            width: 1,
+            dash: 'dash'
+          }
+        },
+        // RSI 30 (Aşırı Satım)
+        {
+          type: 'line',
+          x0: dates[0],
+          y0: 30,
+          x1: dates[dates.length - 1],
+          y1: 30,
+          yref: 'y2',
+          line: {
+            color: '#27ae60',
+            width: 1,
+            dash: 'dash'
+          }
+        },
+        // RSI 50 (Orta çizgi)
+        {
+          type: 'line',
+          x0: dates[0],
+          y0: 50,
+          x1: dates[dates.length - 1],
+          y1: 50,
+          yref: 'y2',
+          line: {
+            color: '#95a5a6',
+            width: 1,
+            dash: 'dot'
+          }
+        }
+      );
+      <% end %>
+
       // Çizgi etiketleri - sadece geçerli olanları göster
       const annotations = [];
       
@@ -573,6 +636,36 @@
         }
       );
 
+      <% if @rsi_data && @rsi_data.length > 0 %>
+      // RSI etiketleri
+      annotations.push(
+        {
+          x: dates[Math.floor(dates.length * 0.9)],
+          y: 70,
+          yref: 'y2',
+          text: '🔴 Aşırı Alım (70)',
+          showarrow: false,
+          bgcolor: 'rgba(231, 76, 60, 0.9)',
+          bordercolor: '#e74c3c',
+          borderwidth: 1,
+          font: {color: 'white', size: 10, family: 'Arial, sans-serif'},
+          borderradius: 3
+        },
+        {
+          x: dates[Math.floor(dates.length * 0.9)],
+          y: 30,
+          yref: 'y2',
+          text: '🟢 Aşırı Satım (30)',
+          showarrow: false,
+          bgcolor: 'rgba(39, 174, 96, 0.9)',
+          bordercolor: '#27ae60',
+          borderwidth: 1,
+          font: {color: 'white', size: 10, family: 'Arial, sans-serif'},
+          borderradius: 3
+        }
+      );
+      <% end %>
+
       const layout = {
         title: false,
         dragmode: 'zoom',
@@ -605,7 +698,7 @@
         },
         yaxis: {
           autorange: true,
-          domain: [0, 1],
+          domain: [0.3, 1], // Ana grafik için alan
           range: [minPrice * 0.95, maxPrice * 1.05],
           title: {
             text: '💰 Fiyat (TL)',
@@ -616,6 +709,23 @@
           tickformat: '.2f',
           ticksuffix: ' TL'
         },
+        <% if @rsi_data && @rsi_data.length > 0 %>
+        yaxis2: {
+          domain: [0, 0.25], // RSI için alt alan
+          range: [0, 100],
+          title: {
+            text: '📊 RSI',
+            font: {size: 12, color: '#9b59b6'}
+          },
+          type: 'linear',
+          gridcolor: 'rgba(155, 89, 182, 0.1)',
+          tickformat: '.0f',
+          side: 'right',
+          overlaying: 'y',
+          showgrid: true,
+          zeroline: false
+        },
+        <% end %>
         shapes: shapes,
         annotations: annotations,
         hovermode: 'x unified',
@@ -656,15 +766,40 @@
               ...layout.yaxis.title,
               font: {size: 14, color: isDark ? '#9ca3af' : '#666'}
             }
-          }
+          }<% if @rsi_data && @rsi_data.length > 0 %>,
+          yaxis2: {
+            ...layout.yaxis2,
+            gridcolor: isDark ? 'rgba(155, 89, 182, 0.2)' : 'rgba(155, 89, 182, 0.1)',
+            title: {
+              ...layout.yaxis2.title,
+              font: {size: 12, color: isDark ? '#bb86fc' : '#9b59b6'}
+            }
+          }<% end %>
         };
         
         Plotly.relayout('priceChart', updatedLayout);
       };
       
       try {
+        // RSI Trace'i ekle (ikinci y-ekseni için)
+        <% if @rsi_data && @rsi_data.length > 0 %>
+        const rsiTrace = {
+          x: dates,
+          y: <%= @rsi_data.to_json %>,
+          type: 'scatter',
+          mode: 'lines',
+          name: 'RSI (14)',
+          line: {
+            color: '#9b59b6',
+            width: 2
+          },
+          yaxis: 'y2',
+          hovertemplate: '<b>RSI:</b> %{y:.1f}<br><b>Tarih:</b> %{x}<extra></extra>'
+        };
+        <% end %>
+
         // Tüm trace'leri grafik verisi olarak ekle
-        const allTraces = [candlestickTrace, ma20Trace, ma50Trace, ma200Trace];
+        const allTraces = [candlestickTrace, ma20Trace, ma50Trace, ma200Trace<% if @rsi_data && @rsi_data.length > 0 %>, rsiTrace<% end %>];
         
         Plotly.newPlot('priceChart', allTraces, layout, config);
         console.log('Grafik başarıyla oluşturuldu');
@@ -681,11 +816,14 @@
         document.getElementById('priceChart').innerHTML = '<div class="alert alert-danger">Grafik oluşturulamadı: ' + error.message + '</div>';
       }
       
-      // Hareketli ortalama toggle fonksiyonları
+      // Hareketli ortalama ve RSI toggle fonksiyonları
       function setupMovingAverageToggles() {
         const ma20Toggle = document.getElementById('ma20Toggle');
         const ma50Toggle = document.getElementById('ma50Toggle');
         const ma200Toggle = document.getElementById('ma200Toggle');
+        <% if @rsi_data && @rsi_data.length > 0 %>
+        const rsiToggle = document.getElementById('rsiToggle');
+        <% end %>
         
         // MA20 toggle
         ma20Toggle.addEventListener('change', function() {
@@ -707,11 +845,29 @@
           Plotly.restyle('priceChart', {'visible': visible}, [3]); // Index 3 = ma200Trace
           console.log('MA200 görünürlük:', visible);
         });
+
+        <% if @rsi_data && @rsi_data.length > 0 %>
+        // RSI toggle - çizgiler ve etiketler dahil
+        rsiToggle.addEventListener('change', function() {
+          const visible = this.checked;
+          
+          // RSI trace'ini göster/gizle
+          Plotly.restyle('priceChart', {'visible': visible}, [4]); // Index 4 = rsiTrace
+          
+          // RSI shapes ve annotations'ları güncelle
+          updateRSIElements(visible);
+          
+          console.log('RSI görünürlük:', visible);
+        });
+        <% end %>
         
         // LocalStorage'dan durumları yükle
         const savedMA20 = localStorage.getItem('ma20Visible') === 'true';
         const savedMA50 = localStorage.getItem('ma50Visible') === 'true';
         const savedMA200 = localStorage.getItem('ma200Visible') === 'true';
+        <% if @rsi_data && @rsi_data.length > 0 %>
+        const savedRSI = localStorage.getItem('rsiVisible') !== 'false'; // Varsayılan olarak açık
+        <% end %>
         
         // Kaydedilen durumları uygula
         if (savedMA20) {
@@ -726,6 +882,18 @@
           ma200Toggle.checked = true;
           Plotly.restyle('priceChart', {'visible': true}, [3]);
         }
+        <% if @rsi_data && @rsi_data.length > 0 %>
+        if (savedRSI) {
+          rsiToggle.checked = true;
+          Plotly.restyle('priceChart', {'visible': true}, [4]);
+          // RSI elementleri zaten başlangıçta eklendi, hiçbir şey yapma
+        } else {
+          rsiToggle.checked = false;
+          Plotly.restyle('priceChart', {'visible': false}, [4]);
+          // RSI elementlerini gizle
+          updateRSIElements(false);
+        }
+        <% end %>
         
         // Durumları LocalStorage'a kaydet
         ma20Toggle.addEventListener('change', function() {
@@ -737,6 +905,173 @@
         ma200Toggle.addEventListener('change', function() {
           localStorage.setItem('ma200Visible', this.checked);
         });
+        <% if @rsi_data && @rsi_data.length > 0 %>
+        rsiToggle.addEventListener('change', function() {
+          localStorage.setItem('rsiVisible', this.checked);
+        });
+        <% end %>
       }
+
+      <% if @rsi_data && @rsi_data.length > 0 %>
+      // RSI elementlerini güncelleme fonksiyonu
+      function updateRSIElements(visible) {
+        // Mevcut layout'u al
+        const currentLayout = document.getElementById('priceChart').layout;
+        
+        // RSI shapes'lerini filtrele
+        const nonRSIShapes = currentLayout.shapes.filter(shape => 
+          shape.yref !== 'y2'
+        );
+        
+        // RSI annotations'larını filtrele  
+        const nonRSIAnnotations = currentLayout.annotations.filter(annotation => 
+          annotation.yref !== 'y2'
+        );
+        
+        let newShapes = [...nonRSIShapes];
+        let newAnnotations = [...nonRSIAnnotations];
+        
+        if (visible) {
+          // RSI shapes'lerini ekle
+          newShapes.push(
+            // RSI 70 (Aşırı Alım)
+            {
+              type: 'line',
+              x0: dates[0],
+              y0: 70,
+              x1: dates[dates.length - 1],
+              y1: 70,
+              yref: 'y2',
+              line: {
+                color: '#e74c3c',
+                width: 1,
+                dash: 'dash'
+              }
+            },
+            // RSI 30 (Aşırı Satım)
+            {
+              type: 'line',
+              x0: dates[0],
+              y0: 30,
+              x1: dates[dates.length - 1],
+              y1: 30,
+              yref: 'y2',
+              line: {
+                color: '#27ae60',
+                width: 1,
+                dash: 'dash'
+              }
+            },
+            // RSI 50 (Orta çizgi)
+            {
+              type: 'line',
+              x0: dates[0],
+              y0: 50,
+              x1: dates[dates.length - 1],
+              y1: 50,
+              yref: 'y2',
+              line: {
+                color: '#95a5a6',
+                width: 1,
+                dash: 'dot'
+              }
+            }
+          );
+          
+          // RSI annotations'larını ekle
+          newAnnotations.push(
+            {
+              x: dates[Math.floor(dates.length * 0.9)],
+              y: 70,
+              yref: 'y2',
+              text: '🔴 Aşırı Alım (70)',
+              showarrow: false,
+              bgcolor: 'rgba(231, 76, 60, 0.9)',
+              bordercolor: '#e74c3c',
+              borderwidth: 1,
+              font: {color: 'white', size: 10, family: 'Arial, sans-serif'},
+              borderradius: 3
+            },
+            {
+              x: dates[Math.floor(dates.length * 0.9)],
+              y: 30,
+              yref: 'y2',
+              text: '🟢 Aşırı Satım (30)',
+              showarrow: false,
+              bgcolor: 'rgba(39, 174, 96, 0.9)',
+              bordercolor: '#27ae60',
+              borderwidth: 1,
+              font: {color: 'white', size: 10, family: 'Arial, sans-serif'},
+              borderradius: 3
+            }
+          );
+        }
+        
+        // Layout'u güncelle
+        Plotly.relayout('priceChart', {
+          shapes: newShapes,
+          annotations: newAnnotations
+        });
+      }
+      <% end %>
     });
 </script>
+
+<!-- RSI Güncel Değer Badge Stilleri -->
+<style>
+  .rsi-current-badge {
+    font-size: 0.9rem !important;
+    font-weight: 800 !important;
+    padding: 6px 12px !important;
+    border-radius: 8px !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    letter-spacing: 0.5px !important;
+    border: 2px solid transparent !important;
+    transition: all 0.2s ease !important;
+  }
+  
+  .rsi-current-badge:hover {
+    transform: scale(1.05) !important;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.2) !important;
+  }
+  
+  /* RSI Seviye Renkleri - Kompakt Versiyon */
+  .bg-success.rsi-current-badge {
+    background: linear-gradient(135deg, #27ae60, #2ecc71) !important;
+    border-color: #27ae60 !important;
+    color: white !important;
+  }
+  
+  .bg-info.rsi-current-badge {
+    background: linear-gradient(135deg, #3498db, #5dade2) !important;
+    border-color: #3498db !important;
+    color: white !important;
+  }
+  
+  .bg-secondary.rsi-current-badge {
+    background: linear-gradient(135deg, #95a5a6, #bdc3c7) !important;
+    border-color: #95a5a6 !important;
+    color: white !important;
+  }
+  
+  .bg-warning.rsi-current-badge {
+    background: linear-gradient(135deg, #f39c12, #f1c40f) !important;
+    border-color: #f39c12 !important;
+    color: #2c3e50 !important;
+    text-shadow: 0 1px 2px rgba(255,255,255,0.3) !important;
+  }
+  
+  .bg-danger.rsi-current-badge {
+    background: linear-gradient(135deg, #e74c3c, #c0392b) !important;
+    border-color: #e74c3c !important;
+    color: white !important;
+  }
+  
+  /* Responsive */
+  @media (max-width: 768px) {
+    .rsi-current-badge {
+      font-size: 0.8rem !important;
+      padding: 4px 8px !important;
+    }
+  }
+</style>
