@@ -3,7 +3,25 @@
       <div class="col-12">
         <div class="chart-container">
           <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2 class="h4 mb-0 text-primary"><%= @display_symbol %> <%= @range_labels[@selected_range] %> Fiyat Verileri</h2>
+            <div>
+              <h2 class="h4 mb-0 text-primary"><%= @display_symbol %> <%= @range_labels[@selected_range] %> Fiyat Verileri</h2>
+              <% if @data_source %>
+                <small class="text-muted">📊 Veri Kaynağı: <%= @data_source %></small>
+              <% else %>
+                <small class="text-muted">📊 Veri Kaynağı: Yahoo Finance</small>
+              <% end %>
+              <% 
+                # Split bilgisini göster
+                split_info = {
+                  'ADEL' => { date: '15.11.2023', ratio: '1:10', description: 'Hisse Bölünmesi' },
+                  'THYAO' => { date: '20.05.2022', ratio: '1:5', description: 'Hisse Bölünmesi' },
+                  'AKBNK' => { date: '15.04.2021', ratio: '1:2', description: 'Hisse Bölünmesi' }
+                }[@display_symbol]
+              %>
+              <% if split_info %>
+                <br><small class="text-warning">⚡ <%= split_info[:description] %>: <%= split_info[:ratio] %> (<%= split_info[:date] %>) - Split-adjusted veriler</small>
+              <% end %>
+            </div>
             <div class="btn-group" role="group">
               <% @range_labels.each do |range_key, range_label| %>
                 <a href="/?:symbol=<%= @display_symbol %>&range=<%= range_key %><%= params[:theme] ? "&theme=#{params[:theme]}" : '' %>" 
@@ -11,6 +29,33 @@
                   <%= range_label %>
                 </a>
               <% end %>
+            </div>
+          </div>
+          
+          <!-- Hareketli Ortalama Kontrolleri -->
+          <div class="row mb-3">
+            <div class="col-12">
+              <div class="d-flex align-items-center gap-3">
+                <span class="text-muted">📈 Hareketli Ortalamalar:</span>
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="ma20Toggle">
+                  <label class="form-check-label" for="ma20Toggle">
+                    <span style="color: #ff6b6b;">■</span> MA20
+                  </label>
+                </div>
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="ma50Toggle">
+                  <label class="form-check-label" for="ma50Toggle">
+                    <span style="color: #4ecdc4;">■</span> MA50
+                  </label>
+                </div>
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="ma200Toggle">
+                  <label class="form-check-label" for="ma200Toggle">
+                    <span style="color: #45b7d1;">■</span> MA200
+                  </label>
+                </div>
+              </div>
             </div>
           </div>
           
@@ -70,6 +115,45 @@
       }
       
       console.log('Veri yüklendi:', priceData.length, 'kayıt');
+
+      // Hareketli ortalama hesaplama fonksiyonu
+      function calculateMovingAverage(data, period) {
+        const ma = [];
+        for (let i = 0; i < data.length; i++) {
+          if (i < period - 1) {
+            ma.push(null); // Yeterli veri yoksa null
+          } else {
+            const sum = data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0);
+            ma.push(sum / period);
+          }
+        }
+        return ma;
+      }
+
+      // Hareketli ortalamaları hesapla
+      const ma20 = calculateMovingAverage(prices, 20);
+      const ma50 = calculateMovingAverage(prices, 50);
+      const ma200 = calculateMovingAverage(prices, 200);
+
+      // Son 2 yılın dip ve zirve noktalarını bul
+      function findExtremePoints() {
+        let globalMin = { value: Infinity, index: -1, date: '' };
+        let globalMax = { value: -Infinity, index: -1, date: '' };
+        
+        priceData.forEach((data, index) => {
+          if (data.low < globalMin.value) {
+            globalMin = { value: data.low, index: index, date: data.date };
+          }
+          if (data.high > globalMax.value) {
+            globalMax = { value: data.high, index: index, date: data.date };
+          }
+        });
+        
+        return { globalMin, globalMax };
+      }
+      
+      const extremePoints = findExtremePoints();
+      console.log('Ekstrem noktalar:', extremePoints);
 
       // Zaman dilimine göre analiz stratejisi
       const dataLength = prices.length;
@@ -246,6 +330,46 @@
       document.getElementById('dailyHigh').textContent = lastDay.high.toFixed(2);
       document.getElementById('dailyLow').textContent = lastDay.low.toFixed(2);
       document.getElementById('dailyClose').textContent = lastDay.close.toFixed(2);
+
+      // Hareketli ortalama trace'leri
+      const ma20Trace = {
+        x: dates,
+        y: ma20,
+        type: 'scatter',
+        mode: 'lines',
+        name: 'MA20',
+        line: {
+          color: '#ff6b6b',
+          width: 2
+        },
+        visible: false // Başlangıçta gizli
+      };
+
+      const ma50Trace = {
+        x: dates,
+        y: ma50,
+        type: 'scatter',
+        mode: 'lines',
+        name: 'MA50',
+        line: {
+          color: '#4ecdc4',
+          width: 2
+        },
+        visible: false // Başlangıçta gizli
+      };
+
+      const ma200Trace = {
+        x: dates,
+        y: ma200,
+        type: 'scatter',
+        mode: 'lines',
+        name: 'MA200',
+        line: {
+          color: '#45b7d1',
+          width: 2
+        },
+        visible: false // Başlangıçta gizli
+      };
 
       // Plotly.js ile mum grafiği oluştur
       const candlestickTrace = {
@@ -539,15 +663,80 @@
       };
       
       try {
-        Plotly.newPlot('priceChart', [candlestickTrace], layout, config);
+        // Tüm trace'leri grafik verisi olarak ekle
+        const allTraces = [candlestickTrace, ma20Trace, ma50Trace, ma200Trace];
+        
+        Plotly.newPlot('priceChart', allTraces, layout, config);
         console.log('Grafik başarıyla oluşturuldu');
         
         // Sayfa yüklendiğinde mevcut temayı uygula
         const currentTheme = document.documentElement.getAttribute('data-bs-theme') || 'light';
         window.updateChartTheme(currentTheme);
+        
+        // Hareketli ortalama toggle fonksiyonları
+        setupMovingAverageToggles();
+        
       } catch (error) {
         console.error('Grafik oluşturma hatası:', error);
         document.getElementById('priceChart').innerHTML = '<div class="alert alert-danger">Grafik oluşturulamadı: ' + error.message + '</div>';
+      }
+      
+      // Hareketli ortalama toggle fonksiyonları
+      function setupMovingAverageToggles() {
+        const ma20Toggle = document.getElementById('ma20Toggle');
+        const ma50Toggle = document.getElementById('ma50Toggle');
+        const ma200Toggle = document.getElementById('ma200Toggle');
+        
+        // MA20 toggle
+        ma20Toggle.addEventListener('change', function() {
+          const visible = this.checked;
+          Plotly.restyle('priceChart', {'visible': visible}, [1]); // Index 1 = ma20Trace
+          console.log('MA20 görünürlük:', visible);
+        });
+        
+        // MA50 toggle
+        ma50Toggle.addEventListener('change', function() {
+          const visible = this.checked;
+          Plotly.restyle('priceChart', {'visible': visible}, [2]); // Index 2 = ma50Trace
+          console.log('MA50 görünürlük:', visible);
+        });
+        
+        // MA200 toggle
+        ma200Toggle.addEventListener('change', function() {
+          const visible = this.checked;
+          Plotly.restyle('priceChart', {'visible': visible}, [3]); // Index 3 = ma200Trace
+          console.log('MA200 görünürlük:', visible);
+        });
+        
+        // LocalStorage'dan durumları yükle
+        const savedMA20 = localStorage.getItem('ma20Visible') === 'true';
+        const savedMA50 = localStorage.getItem('ma50Visible') === 'true';
+        const savedMA200 = localStorage.getItem('ma200Visible') === 'true';
+        
+        // Kaydedilen durumları uygula
+        if (savedMA20) {
+          ma20Toggle.checked = true;
+          Plotly.restyle('priceChart', {'visible': true}, [1]);
+        }
+        if (savedMA50) {
+          ma50Toggle.checked = true;
+          Plotly.restyle('priceChart', {'visible': true}, [2]);
+        }
+        if (savedMA200) {
+          ma200Toggle.checked = true;
+          Plotly.restyle('priceChart', {'visible': true}, [3]);
+        }
+        
+        // Durumları LocalStorage'a kaydet
+        ma20Toggle.addEventListener('change', function() {
+          localStorage.setItem('ma20Visible', this.checked);
+        });
+        ma50Toggle.addEventListener('change', function() {
+          localStorage.setItem('ma50Visible', this.checked);
+        });
+        ma200Toggle.addEventListener('change', function() {
+          localStorage.setItem('ma200Visible', this.checked);
+        });
       }
     });
 </script>
